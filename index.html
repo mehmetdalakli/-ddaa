@@ -378,7 +378,7 @@ function insights(m,P){
     const f=formOf(t.id,5,null,kick),all=formOf(t.id,40,null,kick);if(f.n<3)return;
     const g5=f.gf/f.n,gAll=all.gf/all.n,c5=f.ga/f.n,cAll=all.ga/all.n,nm=esc(t.short);
     if(g5-gAll>=.6&&g5>=1.8)out.push(['🔥',`${nm} gole açıldı: son ${f.n} maçta ${f.gf} gol (maç başı ${fx(g5,1)}, öncesinde ${fx(gAll,1)}).`,'up']);
-    if(gAll-g5>=.6)out.push(['🧊',`${nm} golde kısırlaştı: son ${f.n} maçta maç başı ${fx(g5,1)} gol (öncesinde ${fx(gAll,1)}).`,'down']);
+    if(gAll-g5>=.6&&g5<1.4)out.push(['🧊',`${nm} golde kısırlaştı: son ${f.n} maçta maç başı ${fx(g5,1)} gol (öncesinde ${fx(gAll,1)}).`,'down']);
     if(cAll-c5>=.5&&f.cs>=2)out.push(['🛡️',`${nm} savunması sıkılaştı: son ${f.n} maçın ${f.cs}'${f.cs>2?'ünde':'sinde'} gol yemedi.`,'']);
     if(c5-cAll>=.6)out.push(['⚠️',`${nm} son ${f.n} maçta ${f.ga} gol yedi (maç başı ${fx(c5,1)}).`,'']);
     if(f.o25>=4)out.push(['⚽',`${nm} son ${f.n} maçın ${f.o25}'inde 2,5 Üst bitti.`,'over']);
@@ -390,7 +390,7 @@ function insights(m,P){
     if(s.winless>=5)out.push(['📉',`${nm} ${s.winless} maçtır kazanamıyor.`,'']);
     const v=formOf(t.id,5,isHome,kick);
     if(v.n>=4&&v.ppg>=2.4)out.push(['🏟️',`${nm} ${isHome?'evinde':'deplasmanda'} son ${v.n} maçta ${v.w} galibiyet aldı.`,'']);
-    if(v.n>=4&&v.ppg<=.6)out.push(['🏟️',`${nm} ${isHome?'evinde':'deplasmanda'} son ${v.n} maçta sadece ${v.w+v.d===0?'hiç puan alamadı':v.w+' galibiyet, '+v.d+' beraberlik aldı'}.`,'']);
+    if(v.n>=4&&v.ppg<=.6)out.push(['🏟️',`${nm} ${isHome?'evinde':'deplasmanda'} son ${v.n} maçta ${v.w===0?(v.d===0?'hiç puan alamadı':'hiç kazanamadı ('+v.d+' beraberlik)'):'sadece '+v.w+' kez kazandı'}.`,'']);
     if(f.last){const rest=(kick-f.last)/864e5;if(rest<3.6)out.push(['😓',`${nm} ${Math.max(1,Math.round(rest))} gün önce oynadı (yorgunluk riski).`,''])}
   });
   if(P.market&&P.dis>=.10){const fav=P.model.h>P.model.a?'h':'a';out.push(['⚖️',`Model ile bahis sitesi ayrışıyor: ${esc(fav==='h'?m.home.short:m.away.short)} kazanır — model %${fx(P.model[fav]*100,0)}, piyasa %${fx(P.market[fav]*100,0)}.`,''])}
