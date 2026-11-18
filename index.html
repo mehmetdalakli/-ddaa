@@ -136,6 +136,7 @@ label.f{display:block;font-size:13px;color:var(--mute);margin:10px 0 4px}
 #nav button{position:relative}
 .bdg{position:absolute;top:2px;right:24%;background:var(--orange);color:#fff;border-radius:999px;font-size:10px;font-weight:700;min-width:17px;height:17px;line-height:17px;padding:0 4px;font-style:normal}
 .pn{color:var(--blue)!important}.nn{color:var(--orange)!important}
+details.card summary{cursor:pointer;list-style:none;font-size:14px}
 .warn{background:#fef9c3;border:1px solid var(--gold);color:#422006;border-radius:12px;padding:10px;font-size:13px;margin-bottom:12px}
 </style>
 </head>
@@ -362,6 +363,20 @@ function marketQ(m){
   if(av&&av.O25>1&&av.U25>1)q.o25=(1/av.O25)/(1/av.O25+1/av.U25);
   return q;
 }
+/* Kalibrasyon: geçmiş testindeki "model ne dedi / ne oldu" tablosuna göre olasılıkları düzeltir */
+function calMap(){
+  const c=state.bt?.calib;if(!c||S.calib===false)return null;
+  if(state.calCache&&state.calCache.src===c)return state.calCache.f;
+  const pts=[[0,0]];c.filter(x=>x.n>=30).sort((a,b)=>a.pred-b.pred).forEach(x=>{const w=x.n/(x.n+300);pts.push([x.pred/100,(1-w)*x.pred/100+w*x.act/100])});pts.push([1,1]);
+  const f=p=>{for(let i=1;i<pts.length;i++){if(p<=pts[i][0]){const [x0,y0]=pts[i-1],[x1,y1]=pts[i];return y0+(y1-y0)*(p-x0)/((x1-x0)||1)}}return p};
+  state.calCache={src:c,f};return f;
+}
+function calibrate(P){
+  const f=calMap();if(!f)return;
+  const h=f(P.h),d=f(P.d),a=f(P.a),t=h+d+a;P.h=h/t;P.d=d/t;P.a=a/t;
+  ['o15','o25','o35','btts'].forEach(k=>{const yes=f(P[k]),no=f(1-P[k]);P[k]=yes/(yes+no)});
+  P.cal=true;
+}
 const aCache=new Map();
 function analyse(m){
   const key=m.id+'|'+m.state+'|'+m.clock+'|'+m.home.score+'|'+m.away.score+'|'+state.ver;
@@ -387,6 +402,7 @@ function analyse(m){
   // güven
   const n=Math.min(L.nH||0,L.nA||0);const dis=q?Math.max(Math.abs(P.model.h-q.h),Math.abs(P.model.a-q.a)):0;P.dis=dis;
   P.conf=L.lowData||n<4?1:(n>=8&&dis<.10)?3:2;
+  if(!live)calibrate(P);
   aCache.set(key,P);
   if(m.state==='pre'&&state.mode!=='demo')logPred(m,P);
   return P;
@@ -464,7 +480,7 @@ function evOf(p,odd){return p*odd-1}
 function kellyStake(p,odd){const b=odd-1;const f=(b*p-(1-p))/b;return f>0?f*(S.kelly/100)*S.bank:0}
 function valueBets(m,P){
   const {o,src}=oddsFor(m);const out=[];
-  MARKETS.forEach(([k,l,f])=>{if(o[k]>1){const p=f(P),ev=evOf(p,o[k]);out.push({k,l,p,odd:o[k],ev,src:src[k],sus:ev>.20,stake:ev>.20?0:kellyStake(p,o[k])})}});
+  MARKETS.forEach(([k,l,f])=>{if(o[k]>1){const p=f(P),ev=evOf(p,o[k]);out.push({k,l,p,odd:o[k],ev,src:src[k],sus:ev>.20,hi:o[k]>3,stake:(ev>.20||o[k]>3)?0:kellyStake(p,o[k])})}});
   return out;
 }
 
@@ -540,6 +556,7 @@ async function loadAll(){
       return (L.events||[]).filter(ev=>sameLocalDay(ev.date,d)).map(ev=>parseEvent(ev,lg))}).sort((a,b)=>new Date(a.date)-new Date(b.date));
     setBusy(false);$('#upd').textContent='Veri '+new Date(repo.updated).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'});render();
     clearTimeout(loadAll.t);if(state.matches.some(m=>m.state==='in'))loadAll.t=setTimeout(loadAll,120000);
+    loadBacktest();
     return;
   }
   state.repo=null;state.teamGames={};state.resById={};state.lgRes={};state.rCache={};state.names={};state.ver++;aCache.clear();
@@ -809,7 +826,7 @@ async function loadBacktest(){
   const urls=[];const m=location.hostname.match(/^([^.]+)\.github\.io$/i);const repo=decodeURIComponent(location.pathname.split('/')[1]||'');
   if(m&&repo)urls.push(`https://raw.githubusercontent.com/${m[1]}/${repo}/main/data/backtest.json?t=${Date.now()}`);
   urls.push('data/backtest.json?t='+Date.now());
-  for(const u of urls){try{const r=await fetch(u,{cache:'no-store'});if(r.ok){state.bt=await r.json();if(state.tab==='analiz')render();return}}catch(e){}}
+  for(const u of urls){try{const r=await fetch(u,{cache:'no-store'});if(r.ok){state.bt=await r.json();state.ver++;aCache.clear();render();return}}catch(e){}}
 }
 function btCard(){
   const B=state.bt;
@@ -867,9 +884,11 @@ function fl(f){return `<span class="fl">${f.list.slice().reverse().map(x=>{const
 
 function vValue(){
   const all=[];state.matches.filter(m=>m.state!=='post').forEach(m=>{const P=analyse(m);valueBets(m,P).forEach(v=>all.push({m,...v,conf:P.conf}))});
-  const good=all.filter(v=>v.ev*100>=S.minEV).sort((a,b)=>(a.sus-b.sus)||(b.ev-a.ev));const nSus=good.filter(v=>v.sus).length;
+  const cand=all.filter(v=>v.ev*100>=S.minEV);const hiList=cand.filter(v=>v.hi).sort((a,b)=>b.ev-a.ev);
+  const good=cand.filter(v=>!v.hi).sort((a,b)=>(a.sus-b.sus)||(b.ev-a.ev));const nSus=good.filter(v=>v.sus).length;
   const age=apiOdds.t?Math.round((Date.now()-apiOdds.t)/60000)+' dk önce':'hiç';
   return `<div class="sec"><h3>Değerli Bahisler (+EV)</h3><span class="pill">${good.length}</span></div>
+   ${state.bt?.best?`<div class="warn">Geçmiş testinde (${state.bt.matches} maç) hiçbir ayar kâr getirmedi; en iyisi %${fx(state.bt.best.roi,1)}. Bu liste fırsat değil, model ile piyasanın ayrıştığı yerlerdir.</div>`:''}
    <div class="card note">Değer = olasılık × oran − 1. Oran kaynağı: maç detayında elle girdiğin iddaa oranları, Odds API (son çekim: ${age}; bahis borsaları hariç, ortalamanın en fazla %4 üstü) veya ESPN. Eşik: +%${S.minEV}. Stake: Kasa ${S.bank} × Kelly %${S.kelly}.
    <button class="btn" id="pullOdds">Oranları Odds API'den çek</button></div>
    ${nSus?`<div class="warn">⚠️ ${nSus} seçimde değer %20'nin üstünde. Bu genelde gerçek bir fırsat değil, modelin o maçı yanlış okuduğunu gösterir (sakatlık, rotasyon, motivasyon gibi modelin bilmediği bir şey olabilir). Bunlar listenin sonunda ve kasa önerisi verilmiyor.</div>`:''}
@@ -877,7 +896,10 @@ function vValue(){
      <div style="font-size:13px"><b>${v.l}</b> @ ${fx(v.odd)} <span style="color:var(--mute)">(${esc(v.src)})</span> <span class="cf c${v.conf}">${CONF[v.conf]} güven</span></div>
      <div style="font-size:12px;color:var(--mute)">Olasılık ${pct(v.p)} · Adil oran ${fx(1/v.p)} · ${v.sus?'⚠️ Şüpheli — oynama':'Öneri '+fx(v.stake,0)+' ₺'}</div></div>
      <div class="ev ${v.sus?'neg':'pos'}" style="font-size:16px">${v.sus?'⚠️':'▲'} +${fx(v.ev*100,1)}%</div></div>`).join('')
-   :`<div class="empty">Şu an eşiği geçen değerli bahis yok.<br><br>Maç detayına iddaa oranlarını gir ya da Odds API'den oran çek.</div>`}`;
+   :`<div class="empty">Şu an eşiği geçen değerli bahis yok.<br><br>Maç detayına iddaa oranlarını gir ya da Odds API'den oran çek.</div>`}
+   ${hiList.length?`<details class="card"><summary><b>⚠️ Yüksek oranlı seçimler (3,00 üstü): ${hiList.length}</b></summary>
+     <p class="note">Geçmiş testine göre model sürpriz sonuçların ihtimalini abartıyor; bu aralıktaki "değer" çoğunlukla yanıltıcı. Kasa önerisi verilmiyor.</p>
+     ${hiList.map(v=>`<div class="r small" data-id="${v.m.id}" style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px"><span>${esc(v.m.home.short)} – ${esc(v.m.away.short)}: <b>${v.l}</b> @${fx(v.odd)}</span><span class="ev neg">+${fx(v.ev*100,1)}%</span></div>`).join('')}</details>`:''}`;
 }
 function vAyar(){
   return `<div class="sec"><h3>Ayarlar</h3></div>
@@ -886,7 +908,8 @@ function vAyar(){
    <label class="f">Form hafızası (gün). Küçük = son maçlar daha ağır basar. Önerilen 45</label><input id="sHL" class="full" type="number" step="5" value="${S.halfLife}">
    <label class="f">Bahis sitesi oranının ağırlığı (%). 0 = sadece model. Önerilen 60</label><input id="sMk" class="full" type="number" step="5" value="${S.market}">
    <label class="f">Küçültme (sanal maç sayısı; az veride aşırı tahmini önler)</label><input id="sK" class="full" type="number" step="1" value="${S.k}">
-   <label class="f">Dixon-Coles ρ (düşük skor düzeltmesi)</label><input id="sRho" class="full" type="number" step="0.01" value="${S.rho}"></div>
+   <label class="f">Dixon-Coles ρ (düşük skor düzeltmesi)</label><input id="sRho" class="full" type="number" step="0.01" value="${S.rho}">
+   <label class="f">Kalibrasyon düzeltmesi (geçmiş testine göre)</label><select id="sCal" class="full"><option value="1" ${S.calib!==false?'selected':''}>Açık (önerilen)</option><option value="0" ${S.calib===false?'selected':''}>Kapalı</option></select></div>
   <div class="card"><h4>Değer ve kasa</h4>
    <label class="f">Değer eşiği (%)</label><input id="sEV" class="full" type="number" step="0.5" value="${S.minEV}">
    <label class="f">Kasa (₺)</label><input id="sBank" class="full" type="number" step="50" value="${S.bank}">
@@ -931,7 +954,7 @@ function openMatch(id){
      <div class="card"><h4>Maç sonucu olasılığı</h4>
       <div class="bar"><div class="b1" style="width:${P.h*100}%">1 ${pct(P.h)}</div><div class="bx" style="width:${P.d*100}%">X ${pct(P.d)}</div><div class="b2" style="width:${P.a*100}%">2 ${pct(P.a)}</div></div>
       ${P.market?`<table style="margin-top:8px"><tr><th></th><th>1</th><th>X</th><th>2</th></tr><tr><td>Model (form)</td><td>${pct(P.model.h)}</td><td>${pct(P.model.d)}</td><td>${pct(P.model.a)}</td></tr><tr><td>Bahis sitesi</td><td>${pct(P.market.h)}</td><td>${pct(P.market.d)}</td><td>${pct(P.market.a)}</td></tr><tr><td><b>Sonuç (%${S.market} piyasa)</b></td><td><b>${pct(P.h)}</b></td><td><b>${pct(P.d)}</b></td><td><b>${pct(P.a)}</b></td></tr></table>
-      ${P.mk?`<p class="note">Beklenen gol — model: ${fx(L.lh)}–${fx(L.la)} · bahis sitelerinin oranlarından çıkan: ${fx(P.mk.lh)}–${fx(P.mk.la)} · birleşik: <b>${fx(P.lh)}–${fx(P.la)}</b>. Tüm pazarlar bu birleşik değerden hesaplanır.</p>`:''}`:''}
+      ${P.mk?`<p class="note">Beklenen gol — model: ${fx(L.lh)}–${fx(L.la)} · bahis sitelerinin oranlarından çıkan: ${fx(P.mk.lh)}–${fx(P.mk.la)} · birleşik: <b>${fx(P.lh)}–${fx(P.la)}</b>. Tüm pazarlar bu birleşik değerden hesaplanır.</p>`:''}${P.cal?`<p class="note">✓ Kalibrasyon düzeltmesi uygulandı (geçmiş testindeki sapmalara göre).</p>`:''}`:''}
       <p class="note">${P.mk?'':`Beklenen gol: <b>${fx(P.lh)}</b> – <b>${fx(P.la)}</b> · `}Lig ort. ${fx(L.avg)} gol/takım · Ev avantajı ×${fx(L.hfa)} · Kaynak: ${L.src==='form'?`son maçlar (${L.nH} ve ${L.nA} maç, rakip gücüne göre düzeltilmiş)`:'sezon ortalaması'}</p>
       ${L.src==='form'?`<div class="stt"><div>${esc(m.home.short)} hücum<b>${fx(L.attH*100,0)}</b></div><div>${esc(m.home.short)} savunma<b>${fx(200-L.defH*100,0)}</b></div><div>${esc(m.away.short)} hücum<b>${fx(L.attA*100,0)}</b></div><div>${esc(m.away.short)} savunma<b>${fx(200-L.defA*100,0)}</b></div></div><p class="note">100 = lig ortalaması; yüksek daha iyi.</p>`:''}</div>
      <div class="card"><h4>Pazarlar · iddaa oranını gir, değeri gör</h4><div class="grid">
@@ -973,7 +996,7 @@ document.addEventListener('click',e=>{
   else if(t.id==='refresh')loadAll();
   else if(t.id==='save'){const n=(id,d)=>{const v=parseFloat(String($(id).value).replace(',','.'));return Number.isFinite(v)?v:d};
     S.proxy=$('#sProxy').value;S.oddsKey=$('#sKey').value.trim();S.halfLife=n('#sHL',45);S.market=Math.min(100,Math.max(0,n('#sMk',60)));S.k=n('#sK',4);S.rho=n('#sRho',-0.05);
-    S.minEV=n('#sEV',5);S.bank=n('#sBank',1000);S.kelly=n('#sKelly',25);store.set('ia_settings',S);state.lastProxy=null;state.rCache={};state.ver++;aCache.clear();toast('Kaydedildi');loadAll()}
+    S.minEV=n('#sEV',5);S.calib=$('#sCal').value!=='0';S.bank=n('#sBank',1000);S.kelly=n('#sKelly',25);store.set('ia_settings',S);state.lastProxy=null;state.rCache={};state.ver++;aCache.clear();toast('Kaydedildi');loadAll()}
   else if(t.id==='clr'){try{Object.keys(localStorage).filter(k=>k.startsWith('ia_st_')||k==='ia_apiodds').forEach(k=>localStorage.removeItem(k))}catch(e){}
     apiOdds={t:0,data:{}};state.ver++;aCache.clear();toast('Önbellek temizlendi');loadAll()}
 });
