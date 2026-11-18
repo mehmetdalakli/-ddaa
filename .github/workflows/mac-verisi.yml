@@ -1,0 +1,109 @@
+name: Mac verisi
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  veri:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: ESPN verisini cek
+        run: |
+          cat > /tmp/veri.mjs <<'EOF'
+          import fs from 'fs';
+          const LGS = ['tur.1','tur.2','eng.1','eng.2','esp.1','ita.1','ger.1','fra.1','ned.1','por.1','bel.1','uefa.champions','uefa.europa','uefa.europa.conf'];
+          const ymd = d => d.toISOString().slice(0,10).replace(/-/g,'');
+          const now = Date.now();
+          const from = ymd(new Date(now - 86400e3)), to = ymd(new Date(now + 3*86400e3));
+          const sleep = ms => new Promise(r => setTimeout(r, ms));
+          async function getJSON(u){
+            for (let i = 0; i < 3; i++){
+              try { const r = await fetch(u, {headers:{'User-Agent':'Mozilla/5.0'}}); if (r.ok) return await r.json(); }
+              catch (e) {}
+              await sleep(1500);
+            }
+            return null;
+          }
+          const sc = s => (s && typeof s === 'object') ? (s.displayValue ?? s.value) : s;
+          const out = { updated: new Date().toISOString(), leagues: {} };
+          for (const lg of LGS){
+            const sb = await getJSON(`https://site.api.espn.com/apis/site/v2/sports/soccer/${lg}/scoreboard?dates=${from}-${to}&limit=300`);
+            const st = await getJSON(`https://site.api.espn.com/apis/v2/sports/soccer/${lg}/standings`);
+            const events = (sb?.events || []).map(ev => {
+              const c = (ev.competitions || [])[0] || {};
+              const o = (c.odds || [])[0];
+              const s = ev.status || c.status || {};
+              return {
+                id: ev.id, date: ev.date,
+                status: { type: { state: s.type?.state, shortDetail: s.type?.shortDetail }, displayClock: s.displayClock },
+                competitions: [{
+                  competitors: (c.competitors || []).map(x => ({
+                    homeAway: x.homeAway, score: sc(x.score), form: x.form,
+                    team: { id: x.team?.id, displayName: x.team?.displayName, shortDisplayName: x.team?.shortDisplayName, abbreviation: x.team?.abbreviation, logo: x.team?.logo }
+                  })),
+                  odds: o ? [{ provider: { name: o.provider?.name },
+                    homeTeamOdds: { moneyLine: o.homeTeamOdds?.moneyLine },
+                    awayTeamOdds: { moneyLine: o.awayTeamOdds?.moneyLine },
+                    drawOdds: { moneyLine: o.drawOdds?.moneyLine } }] : []
+                }]
+              };
+            });
+            const teams = {};
+            const walk = n => {
+              if (!n) return;
+              (n.standings?.entries || []).forEach(e => {
+                const s = {}; (e.stats || []).forEach(x => { s[x.name || x.type] = x.value; });
+                teams[String(e.team?.id)] = { name: e.team?.displayName, gp: +s.gamesPlayed || 0, gf: +s.pointsFor || 0, ga: +s.pointsAgainst || 0, rank: +s.rank || null, pts: +s.points || 0 };
+              });
+              (n.children || []).forEach(walk);
+            };
+            walk(st);
+            const names = {};
+            const results = [];
+            const seen = new Set();
+            for (let k = 0; k < 4; k++){
+              const a = ymd(new Date(now - (120 - 30*k) * 86400e3)), b = ymd(new Date(now - (91 - 30*k) * 86400e3));
+              const r = await getJSON(`https://site.api.espn.com/apis/site/v2/sports/soccer/${lg}/scoreboard?dates=${a}-${b}&limit=500`);
+              (r?.events || []).forEach(ev => {
+                const c = (ev.competitions || [])[0] || {};
+                const s = ev.status || c.status || {};
+                if (!s.type?.completed || seen.has(ev.id)) return;
+                const H = (c.competitors || []).find(x => x.homeAway === 'home'), A = (c.competitors || []).find(x => x.homeAway === 'away');
+                if (!H || !A) return;
+                const hg = +sc(H.score), ag = +sc(A.score);
+                if (!Number.isFinite(hg) || !Number.isFinite(ag)) return;
+                seen.add(ev.id);
+                names[H.team?.id] = H.team?.shortDisplayName || H.team?.displayName;
+                names[A.team?.id] = A.team?.shortDisplayName || A.team?.displayName;
+                results.push([ev.id, Date.parse(ev.date), String(H.team?.id), String(A.team?.id), hg, ag]);
+              });
+            }
+            results.sort((x, y) => x[1] - y[1]);
+            out.leagues[lg] = { ok: !!sb, events, teams, results, names };
+            console.log(lg, 'mac:', events.length, 'takim:', Object.keys(teams).length, 'sonuc:', results.length);
+          }
+          fs.mkdirSync('data', { recursive: true });
+          fs.writeFileSync('data/espn.json', JSON.stringify(out));
+          EOF
+          node /tmp/veri.mjs
+
+      - name: Kaydet
+        run: |
+          git config user.name "veri-bot"
+          git config user.email "veri-bot@users.noreply.github.com"
+          git add data/espn.json
+          git diff --cached --quiet && exit 0
+          git commit -m "Mac verisi guncellendi"
+          git pull --rebase
+          git push
