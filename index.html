@@ -128,6 +128,14 @@ label.f{display:block;font-size:13px;color:var(--mute);margin:10px 0 4px}
 .dr{font-size:11px;font-weight:700;border-radius:6px;padding:2px 7px;background:#e2e8f0}
 .dr.ok{background:var(--blue);color:#fff}.dr.no{background:var(--orange);color:#fff}
 .hstats div{min-width:0}
+.cp-row.my{grid-template-columns:1fr auto 64px 34px}
+.oi{width:60px;padding:6px;border:1px solid var(--line);border-radius:8px;text-align:center;font-size:14px;font-weight:700}
+.rm{border:0;background:#e2e8f0;border-radius:8px;width:32px;height:32px}
+.addk{margin-top:6px;width:100%;border:1px dashed var(--blue);background:#eff6ff;color:var(--navy2);border-radius:8px;padding:5px;font-size:12px;font-weight:600}
+.addk.on{background:var(--blue);color:#fff;border-style:solid}
+#nav button{position:relative}
+.bdg{position:absolute;top:2px;right:24%;background:var(--orange);color:#fff;border-radius:999px;font-size:10px;font-weight:700;min-width:17px;height:17px;line-height:17px;padding:0 4px;font-style:normal}
+.pn{color:var(--blue)!important}.nn{color:var(--orange)!important}
 .warn{background:#fef9c3;border:1px solid var(--gold);color:#422006;border-radius:12px;padding:10px;font-size:13px;margin-bottom:12px}
 </style>
 </head>
@@ -594,7 +602,7 @@ function vBulten(){
     <h2>${top?esc(top.m.home.short+' vs '+top.m.away.short):state.loading?'Bülten yükleniyor':'Başlamamış maç yok'}</h2>
     <p>${top?`Günün en net favorisi: ${top.P.h>top.P.a?esc(top.m.home.short):esc(top.m.away.short)} (${pct(Math.max(top.P.h,top.P.a))}).`:'Başka bir gün seçebilirsin.'}</p>
     <div class="hstats"><div><span>Maç</span><b>${state.loading?'…':state.matches.length}</b></div><div><span>Canlı</span><b>${live}</b></div><div style="text-align:right"><span>Model</span><b>${state.mode==='repo'?'Form ağırlıklı':'Sezon ort.'}</b></div></div>
-    ${state.matches.some(m=>m.state==='pre')||S.kuponGun==='2'?`<button class="hbtn" data-tab="kupon">🎟️ Günün 3 kuponunu gör</button>`:''}</div>
+    ${state.matches.some(m=>m.state==='pre')||S.kuponGun==='2'?`<button class="hbtn" data-tab="kupon">🎟️ Kuponlar: önerilen 3 kupon + kendi kuponun</button>`:''}</div>
     ${state.mode==='demo'?`<div class="warn">Canlı veriye ulaşılamadı, demo maçlar gösteriliyor. GitHub'daki veri dosyası (data/espn.json) henüz oluşmamış olabilir; "Mac verisi" görevi ilk kez çalışınca canlı veri gelir.${state.err?`<br><small>Hata: ${esc(state.err)}</small>`:''}</div>`:''}
     ${state.mode==='repo'&&state.repoTime&&Date.now()-new Date(state.repoTime)>3*3600e3?`<div class="warn">Veri dosyası ${Math.round((Date.now()-new Date(state.repoTime))/3600e3)} saattir güncellenmemiş. GitHub'da Actions → Mac verisi görevini kontrol et.</div>`:''}
     <div class="chips">${days}</div>
@@ -667,7 +675,7 @@ function kuponDurum(c){let hit=0,miss=0,wait=0;
   const picks=c.picks.map(p=>{const r=state.resById?.[p.id];if(!r){wait++;return {...p,s:'⏳'}}const ok=hitOf(p.k,r[0],r[1]);ok?hit++:miss++;return {...p,s:ok?'✓':'✗',sk:r[0]+'-'+r[1]}});
   return {picks,hit,miss,wait,durum:miss?'YATTI':wait?'Devam ediyor':'TUTTU'};
 }
-function vKupon(){
+function vOneri(){
   const maclar=kuponMaclari();
   const kuponlar=KUPON_TIPLERI.map(T=>kuponYap(T,maclar));state.kuponlar=kuponlar;kuponKaydet(kuponlar);
   let html=`<div class="sec"><h3>Günün Kuponları</h3><span class="pill">${maclar.length} maç</span></div>
@@ -679,7 +687,7 @@ function vKupon(){
     html+=K.sec.map(a=>`<div class="cp-row" data-id="${a.m.id}"><div><div class="pk">${a.l}</div><div class="mt">${hhmm(a.m.date)} · ${esc(a.m.home.short)} – ${esc(a.m.away.short)} · <span class="cf c${a.conf}">${CONF[a.conf]}</span></div></div>
       <div class="mt">${pct(a.p)}</div><div class="od">${a.real?'':'≈'}${fx(a.odd)}</div></div>`).join('');
     html+=`<div class="cp-f"><div>Tutma ihtimali<b>%${fx(K.ihtimal*100,1)}</b></div><div>Toplam oran<b>${fx(K.oran)}</b></div><div>Öneri (kasa %${K.T.kasa})<b>${fx(K.stake,0)} ₺</b></div></div>
-      <div class="cp-a"><button data-copy="${i}">📋 Kuponu kopyala</button></div></div>`;
+      <div class="cp-a"><button data-copy="${i}">📋 Kopyala</button><button data-imp="${i}">➕ Kuponuma aktar</button></div></div>`;
   });
   const gecmis=Object.entries(kupGecmis).filter(([k,c])=>Math.min(...c.picks.map(p=>p.t))<=Date.now()).sort((a,b)=>b[0].localeCompare(a[0])).slice(0,12);
   if(gecmis.length){
@@ -692,6 +700,89 @@ function vKupon(){
   }
   return html+`<p class="note" style="padding:0 4px">Banko kupona sadece "Yüksek güven" maçlar girer. Takımların son form trendiyle uyumlu seçimler öne alınır. ≈ işaretli oranlar tahminidir; gerçek iddaa oranını maç detayına girersen kupon onu kullanır. Tutma ihtimali maçların birbirinden bağımsız olduğu varsayımıyla hesaplanır; garanti değildir.</p>`;
 }
+
+/* ---------- KENDİ KUPONUM (sanal oyun) ---------- */
+let myPicks=store.get('ia_my',[]),myCps=store.get('ia_mycp',[]);
+function saveMy(){store.set('ia_my',myPicks);badge()}
+function saveCps(){store.set('ia_mycp',myCps)}
+function badge(){const b=document.querySelector('#nav [data-tab="kupon"]');if(!b)return;let s=b.querySelector('.bdg');
+  if(!s){s=document.createElement('span');s.className='bdg';b.appendChild(s)}s.textContent=myPicks.length;s.style.display=myPicks.length?'':'none'}
+function togglePick(m,k,l,p,odd,est){
+  const i=myPicks.findIndex(x=>x.id===m.id);
+  const pk={id:m.id,lg:m.lg,k,l,p:+p.toFixed(3),odd:+(+odd).toFixed(2),est,hn:m.home.short,an:m.away.short,t:Date.parse(m.date)};
+  if(i>=0&&myPicks[i].k===k){myPicks.splice(i,1);saveMy();return 'Kupondan çıkarıldı'}
+  if(i>=0){myPicks[i]=pk;saveMy();return 'Bu maçtaki seçim değiştirildi'}
+  myPicks.push(pk);saveMy();return `Kupona eklendi (${myPicks.length} maç)`;
+}
+function cpEval(c){let hit=0,miss=0,wait=0;
+  const picks=c.picks.map(p=>{const r=state.resById?.[p.id];if(!r){wait++;return {...p,s:'⏳'}}const ok=hitOf(p.k,r[0],r[1]);ok?hit++:miss++;return {...p,s:ok?'✓':'✗',sk:r[0]+'-'+r[1]}});
+  const durum=miss?'YATTI':wait?'Bekliyor':'TUTTU';return {picks,hit,miss,wait,durum,ret:durum==='TUTTU'?c.stake*c.oran:0}}
+function myText(picks,oran,stake,title){
+  return `${title} (${new Date().toLocaleDateString('tr-TR')})\n`+picks.map(p=>`${new Date(p.t).toLocaleString('tr-TR',{weekday:'short',hour:'2-digit',minute:'2-digit'})} ${p.hn} - ${p.an}: ${p.l} @${fx(p.odd)}`).join('\n')+
+    `\nToplam oran: ${fx(oran)}${stake?` · Yatırım: ${stake} ₺ · Olası kazanç: ${fx(stake*oran,0)} ₺`:''}`}
+function copyText(t){(navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>toast('Kopyalandı'),()=>toast('Kopyalanamadı'))}
+
+function vKupon(){
+  if(!state.kv)state.kv=myPicks.length?'my':'oneri';
+  const tabs=[['my','🧾 Kuponum'+(myPicks.length?` (${myPicks.length})`:'')],['oneri','💡 Önerilen'],['hist','📒 Kuponlarım'+(myCps.length?` (${myCps.length})`:'')]];
+  const html=`<div class="chips">${tabs.map(t=>`<button class="chip ${state.kv===t[0]?'on':''}" data-kv="${t[0]}">${t[1]}</button>`).join('')}</div>`;
+  return html+(state.kv==='oneri'?vOneri():state.kv==='hist'?vHist():vMy());
+}
+function vMy(){
+  if(!myPicks.length)return `<div class="empty">Kuponun boş.<br><br>Bültende bir maça dokun, <b>Pazarlar</b> bölümünde istediğin seçimin altındaki <b>+ Kupona ekle</b>'ye bas. Her maçtan bir seçim eklenir.<br><br>Ya da 💡 Önerilen sekmesindeki bir kuponu buraya aktar.</div>`;
+  myPicks.sort((a,b)=>a.t-b.t);
+  const now=Date.now(),started=myPicks.filter(p=>p.t<=now).length;
+  const oran=myPicks.reduce((a,p)=>a*p.odd,1),ih=myPicks.reduce((a,p)=>a*p.p,1),stake=state.myStake??100;
+  return `<div class="cp k1"><div class="cp-h"><div><b>Benim Kuponum</b><small>${myPicks.length} maç · sanal oyun, para yatırılmaz</small></div><b>${fx(oran)}</b></div>
+   ${myPicks.map(p=>`<div class="cp-row my"><div data-id="${p.id}"><div class="pk">${esc(p.l)}</div><div class="mt">${new Date(p.t).toLocaleString('tr-TR',{weekday:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})} · ${esc(p.hn)} – ${esc(p.an)}${p.t<=now?' · <b>başladı</b>':''}${p.est?' · ≈ tahmini oran':''}</div></div>
+     <div class="mt">${pct(p.p)}</div><input class="oi" inputmode="decimal" data-podd="${p.id}" value="${fx(p.odd)}"><button class="rm" data-rm="${p.id}">✕</button></div>`).join('')}
+   <div class="cp-f"><div>Model tutma ihtimali<b>%${fx(ih*100,1)}</b></div><div>Toplam oran<b>${fx(oran)}</b></div><div>Olası kazanç<b>${fx(stake*oran,0)} ₺</b></div></div>
+   <div style="padding:0 14px 10px"><label class="f">Sanal yatırım (₺)</label><input id="myStake" class="full" inputmode="decimal" value="${stake}"></div>
+   ${started?`<div class="warn" style="margin:0 14px 10px">${started} maç başlamış. Kaydetmek için ✕ ile çıkar.</div>`:''}
+   <div class="cp-a"><button id="mySave">💾 Kaydet</button><button id="myCopy">📋 Kopyala</button><button id="myClr">🗑️ Temizle</button></div></div>
+   <p class="note" style="padding:0 4px">Oran kutusuna iddaa'daki oranı yazarsan kupon onunla hesaplanır. Kaydedince kupon 📒 Kuponlarım'a geçer; maçlar bitince tuttu/yattı ve sanal kasan kendiliğinden hesaplanır.</p>`;
+}
+function vHist(){
+  const list=myCps.map((c,i)=>({c,i,e:cpEval(c)}));
+  const done=list.filter(x=>x.e.durum!=='Bekliyor');const yat=done.reduce((a,x)=>a+x.c.stake,0),don=done.reduce((a,x)=>a+x.e.ret,0),net=don-yat;
+  let html=`<div class="card"><h4>Sanal kasa</h4><div class="stt"><div>Kupon<b>${myCps.length}</b></div><div>Tutan<b>${done.filter(x=>x.e.durum==='TUTTU').length}/${done.length}</b></div><div>Yatırılan<b>${fx(yat,0)} ₺</b></div><div>Net<b class="${net>=0?'pn':'nn'}">${net>=0?'+':''}${fx(net,0)} ₺</b></div></div>
+    <p class="note">Sonuçlanan kuponlar sayılır. Bekleyen: ${list.length-done.length}.${yat?` Getiri: %${fx(net/yat*100,0)}.`:''}</p></div>`;
+  if(!myCps.length)html+=`<div class="empty">Henüz kaydedilmiş kupon yok.<br><br>🧾 Kuponum'da kupon kurup <b>Kaydet</b>'e bas.</div>`;
+  list.slice().reverse().forEach(({c,i,e})=>{
+    html+=`<div class="card hist"><div class="r"><b>${esc(c.ad)} · ${new Date(c.ts).toLocaleDateString('tr-TR',{day:'2-digit',month:'2-digit'})}</b><span class="dr ${e.durum==='TUTTU'?'ok':e.durum==='YATTI'?'no':''}">${e.durum}</span></div>
+     ${e.picks.map(p=>`<div class="r small"><span>${p.s} ${esc(p.hn)} – ${esc(p.an)}: <b>${esc(p.l)}</b></span><span>${p.sk||''} @${fx(p.odd)}</span></div>`).join('')}
+     <div class="r small mute"><span>Oran ${fx(c.oran)} · Yatırım ${fx(c.stake,0)} ₺</span><span>${e.durum==='TUTTU'?'Kazanç '+fx(e.ret,0)+' ₺':e.durum==='YATTI'?'−'+fx(c.stake,0)+' ₺':e.hit+' ✓ · '+e.wait+' ⏳'}</span></div>
+     <div class="cp-a" style="padding:6px 0 0"><button data-cpcopy="${i}">📋 Kopyala</button><button data-cpdel="${i}">🗑️ Sil</button></div></div>`});
+  html+=`<div class="card"><h4>Yedekle / taşı</h4><p class="note">Kuponların sadece bu telefonda saklanır. Telefon değiştirirsen ya da Chrome verilerini silersen kaybolur. Yedek kodunu kopyalayıp kendine WhatsApp'tan gönderebilirsin.</p>
+    <div class="cp-a" style="padding:0"><button id="bkCopy">📤 Yedek kodunu kopyala</button><button id="bkLoad">📥 Yedekten yükle</button></div>
+    <textarea id="bkText" class="full" style="display:none;margin-top:8px;height:90px;width:100%" placeholder="Yedek kodunu buraya yapıştır, sonra tekrar Yedekten yükle'ye bas"></textarea></div>`;
+  return html;
+}
+document.addEventListener('click',e=>{
+  const t=e.target.closest('[data-kv],[data-rm],[data-imp],[data-cpcopy],[data-cpdel],#mySave,#myCopy,#myClr,#bkCopy,#bkLoad');if(!t)return;
+  if(t.dataset.kv){state.kv=t.dataset.kv;render()}
+  else if(t.dataset.rm){myPicks=myPicks.filter(p=>p.id!==t.dataset.rm);saveMy();render()}
+  else if(t.dataset.imp!=null){const K=state.kuponlar?.[+t.dataset.imp];if(!K)return;
+    myPicks=K.sec.map(a=>({id:a.m.id,lg:a.m.lg,k:a.k,l:a.l,p:+a.p.toFixed(3),odd:a.odd,est:!a.real,hn:a.m.home.short,an:a.m.away.short,t:Date.parse(a.m.date)}));
+    saveMy();state.kv='my';render();window.scrollTo(0,0);toast('Kuponuna aktarıldı; istediğin gibi değiştirebilirsin')}
+  else if(t.dataset.cpcopy!=null){const c=myCps[+t.dataset.cpcopy];if(c)copyText(myText(c.picks,c.oran,c.stake,c.ad))}
+  else if(t.dataset.cpdel!=null){if(t.dataset.sure){myCps.splice(+t.dataset.cpdel,1);saveCps();render()}else{t.dataset.sure='1';t.textContent='Emin misin? Tekrar bas'}}
+  else if(t.id==='mySave'){if(myPicks.some(p=>p.t<=Date.now())){toast('Başlamış maçları çıkar');return}
+    const oran=myPicks.reduce((a,p)=>a*p.odd,1);
+    myCps.push({ts:Date.now(),ad:'Kupon #'+(myCps.length+1),stake:state.myStake??100,oran:+oran.toFixed(2),ih:myPicks.reduce((a,p)=>a*p.p,1),picks:myPicks.slice()});
+    saveCps();myPicks=[];saveMy();state.kv='hist';render();window.scrollTo(0,0);toast('Kupon kaydedildi')}
+  else if(t.id==='myCopy'){copyText(myText(myPicks,myPicks.reduce((a,p)=>a*p.odd,1),state.myStake??100,'Kuponum'))}
+  else if(t.id==='myClr'){if(t.dataset.sure){myPicks=[];saveMy();render()}else{t.dataset.sure='1';t.textContent='Emin misin?'}}
+  else if(t.id==='bkCopy'){copyText('IDDAA1:'+btoa(unescape(encodeURIComponent(JSON.stringify({my:myPicks,cps:myCps})))))}
+  else if(t.id==='bkLoad'){const ta=$('#bkText');if(ta.style.display==='none'){ta.style.display='block';ta.focus();return}
+    try{const j=JSON.parse(decodeURIComponent(escape(atob(ta.value.trim().replace(/^IDDAA1:/,'')))));const have=new Set(myCps.map(c=>c.ts));
+      (j.cps||[]).forEach(c=>{if(!have.has(c.ts))myCps.push(c)});myCps.sort((a,b)=>a.ts-b.ts);saveCps();if(!myPicks.length&&j.my)myPicks=j.my;saveMy();render();toast('Yedek yüklendi')}
+    catch(err){toast('Yedek kodu okunamadı')}}
+});
+document.addEventListener('change',e=>{
+  if(e.target.id==='myStake'){const v=parseFloat(String(e.target.value).replace(',','.'));state.myStake=v>0?v:100;render()}
+  else if(e.target.dataset?.podd){const v=parseFloat(String(e.target.value).replace(',','.'));const p=myPicks.find(x=>x.id===e.target.dataset.podd);if(p&&v>1){p.odd=+v.toFixed(2);p.est=false;saveMy()}render()}
+});
 
 /* ---------- ANALİZ ---------- */
 function vAnaliz(){
@@ -755,7 +846,7 @@ function vAyar(){
 function render(){
   header();
   const v={bulten:vBulten,kupon:vKupon,analiz:vAnaliz,value:vValue,ayar:vAyar}[state.tab]();
-  $('#view').innerHTML=v;saveLog();
+  $('#view').innerHTML=v;saveLog();badge();
   document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab===state.tab));
   const q=$('#q');if(q){q.oninput=e=>{state.q=e.target.value;const pos=e.target.selectionStart;render();const n=$('#q');n.focus();n.setSelectionRange(pos,pos)}}
 }
@@ -790,12 +881,15 @@ function openMatch(id){
       ${MARKETS.map(([k,l,f])=>{const p=f(P),odd=o[k],ev=odd>1?evOf(p,odd):null;const val=ev!=null&&ev*100>=S.minEV&&ev<=.2;
         return `<div class="mk ${val?'val':''}"><div class="r"><b>${l}</b><span>${pct(p)}</span></div>
         <div class="r"><small>Adil ${fx(1/p)}</small><input inputmode="decimal" data-mk="${k}" value="${mo[k]||''}" placeholder="${odd?fx(odd):'oran'}"></div>
-        <div class="r"><small>${odd?esc(src[k]):''}</small><span class="ev ${ev>0?'pos':'neg'}">${ev==null?'':(ev>.2?'⚠️ +':ev>0?'▲ +':'▼ ')+fx(ev*100,1)+'%'}</span></div></div>`}).join('')}
+        <div class="r"><small>${odd?esc(src[k]):''}</small><span class="ev ${ev>0?'pos':'neg'}">${ev==null?'':(ev>.2?'⚠️ +':ev>0?'▲ +':'▼ ')+fx(ev*100,1)+'%'}</span></div>
+        ${m.state==='pre'&&Date.parse(m.date)>Date.now()?(()=>{const on=myPicks.some(x=>x.id===m.id&&x.k===k);return `<button class="addk ${on?'on':''}" data-add="${k}">${on?'✓ Kuponda':'+ Kupona ekle'}</button>`})():''}</div>`}).join('')}
      </div><p class="note">Adil oran = 1 / olasılık. Girilen oran adil orandan yüksekse değer vardır (▲). Kasa önerisi: ${valueBets(m,P).filter(v=>v.stake>0).map(v=>`${v.l} ${fx(v.stake,0)} ₺`).join(', ')||'—'}</p></div>
      <div class="card"><h4>En olası skorlar</h4><div class="scores">${P.scores.map(x=>`<div><b>${x.s}</b>${pct(x.p)}</div>`).join('')}</div></div>
      ${formBlock(m.home,true,kick)}${formBlock(m.away,false,kick)}
      ${sh||sa?`<div class="card"><h4>Puan durumu</h4><table><tr><th>Takım</th><th>Sıra</th><th>O</th><th>P</th><th>AG</th><th>YG</th></tr>${[[sh,m.home.short],[sa,m.away.short]].map(([t,n])=>t?`<tr><td>${esc(n)}</td><td>${t.rank||'-'}</td><td>${t.gp}</td><td>${t.pts??'-'}</td><td>${t.gf}</td><td>${t.ga}</td></tr>`:'').join('')}</table></div>`:''}`;
     $('#cls').onclick=close;
+    document.querySelectorAll('#sheetIn [data-add]').forEach(btn=>btn.onclick=ev=>{ev.stopPropagation();const k=btn.dataset.add;const mk=MARKETS.find(x=>x[0]===k);const p=mk[2](P);
+      const odd=o[k]>1?o[k]:MARGIN/p;toast(togglePick(m,k,mk[1],p,odd,!(o[k]>1)));const sc=$('#sheet .in').scrollTop;draw();$('#sheet .in').scrollTop=sc;render();});
     document.querySelectorAll('#sheetIn input[data-mk]').forEach(inp=>inp.onchange=e=>{
       const v=parseFloat(String(e.target.value).replace(',','.'));manualOdds[m.id]=manualOdds[m.id]||{};
       if(v>1)manualOdds[m.id][e.target.dataset.mk]=v;else delete manualOdds[m.id][e.target.dataset.mk];
