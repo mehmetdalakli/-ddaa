@@ -193,8 +193,9 @@ const store = {
 };
 
 const DEF = {leagues:['tur.1','eng.1','esp.1','ita.1','ger.1','fra.1','uefa.champions','uefa.europa'],
-  proxy:'auto', oddsKey:'', k:4, bank:1000, minEV:3, kelly:25, rho:-0.05, halfLife:45, market:40, kuponGun:'1'};
-let S = Object.assign({}, DEF, store.get('ia_settings',{}));
+  proxy:'auto', oddsKey:'', k:4, bank:1000, minEV:5, kelly:25, rho:-0.05, halfLife:45, market:60, sv:2, kuponGun:'1'};
+const _st=store.get('ia_settings',{});let S = Object.assign({}, DEF, _st);
+if((_st.sv||0)<2){S.market=60;S.minEV=Math.max(S.minEV||0,5);S.sv=2;try{localStorage.setItem('ia_settings',JSON.stringify(S))}catch(e){}}
 let manualOdds = store.get('ia_odds',{});        // {matchId:{1:2.1,...}}
 let apiOdds = store.get('ia_apiodds',{t:0,data:{}});
 
@@ -351,7 +352,10 @@ function analyse(m){
   P.scores=Object.entries(agg).map(([s,p])=>({s,p})).sort((x,y)=>y.p-x.p).slice(0,10);
   P.model={h:P.h,d:P.d,a:P.a};
   const q=!live?marketProbs(m):null;P.market=q;
-  if(q){const w=(S.market??40)/100;P.h=(1-w)*P.h+w*q.h;P.d=(1-w)*P.d+w*q.d;P.a=(1-w)*P.a+w*q.a}
+  if(q){const w=(S.market??60)/100;P.h=(1-w)*P.h+w*q.h;P.d=(1-w)*P.d+w*q.d;P.a=(1-w)*P.a+w*q.a}
+  if(!live){const av=apiOdds.data[m.id]?.avg;const w=(S.market??60)/100;P.mkTot={};
+    [['15','o15'],['25','o25'],['35','o35']].forEach(([n,f])=>{const o=av?.['O'+n],u=av?.['U'+n];
+      if(o>1&&u>1){const qo=(1/o)/(1/o+1/u);P.mkTot[f]=qo;P[f]=(1-w)*P[f]+w*qo}});}
   P.L=L;P.lh=L.lh;P.la=L.la;P.live=live;
   // güven
   const n=Math.min(L.nH||0,L.nA||0);const dis=q?Math.max(Math.abs(P.model.h-q.h),Math.abs(P.model.a-q.a)):0;P.dis=dis;
@@ -461,8 +465,8 @@ async function loadOddsAPI(){
         }))});
         const best={bk:{},avg:{},nb:{}};
         Object.entries(col).forEach(([k,arr])=>{const avg=arr.reduce((a,x)=>a+x.price,0)/arr.length;arr.sort((a,b)=>b.price-a.price);
-          // tek bir sitenin aşırı yüksek oranı yerine: en yüksek oran, ortalamanın en fazla %8 üstü
-          const top=arr[0];best[k]=+Math.min(top.price,avg*1.08).toFixed(2);best.bk[k]=top.price>avg*1.08?'Piyasa üst sınırı':top.bk;best.avg[k]=+avg.toFixed(3);best.nb[k]=arr.length});
+          // tek bir sitenin aşırı yüksek oranı yerine: en yüksek oran, ortalamanın en fazla %4 üstü
+          const top=arr[0];best[k]=+Math.min(top.price,avg*1.04).toFixed(2);best.bk[k]=top.price>avg*1.04?'Piyasa üst sınırı':top.bk;best.avg[k]=+avg.toFixed(3);best.nb[k]=arr.length});
         if(Object.keys(best.avg).length){apiOdds.data[m.id]=best;n++}
       });
     }catch(e){console.warn(e)}
@@ -719,7 +723,7 @@ function vValue(){
   const good=all.filter(v=>v.ev*100>=S.minEV).sort((a,b)=>(a.sus-b.sus)||(b.ev-a.ev));const nSus=good.filter(v=>v.sus).length;
   const age=apiOdds.t?Math.round((Date.now()-apiOdds.t)/60000)+' dk önce':'hiç';
   return `<div class="sec"><h3>Değerli Bahisler (+EV)</h3><span class="pill">${good.length}</span></div>
-   <div class="card note">Değer = olasılık × oran − 1. Oran kaynağı: maç detayında elle girdiğin iddaa oranları, Odds API (son çekim: ${age}; bahis borsaları hariç, ortalamanın en fazla %8 üstü) veya ESPN. Eşik: +%${S.minEV}. Stake: Kasa ${S.bank} × Kelly %${S.kelly}.
+   <div class="card note">Değer = olasılık × oran − 1. Oran kaynağı: maç detayında elle girdiğin iddaa oranları, Odds API (son çekim: ${age}; bahis borsaları hariç, ortalamanın en fazla %4 üstü) veya ESPN. Eşik: +%${S.minEV}. Stake: Kasa ${S.bank} × Kelly %${S.kelly}.
    <button class="btn" id="pullOdds">Oranları Odds API'den çek</button></div>
    ${nSus?`<div class="warn">⚠️ ${nSus} seçimde değer %20'nin üstünde. Bu genelde gerçek bir fırsat değil, modelin o maçı yanlış okuduğunu gösterir (sakatlık, rotasyon, motivasyon gibi modelin bilmediği bir şey olabilir). Bunlar listenin sonunda ve kasa önerisi verilmiyor.</div>`:''}
    ${good.length?good.map(v=>`<div class="m" data-id="${v.m.id}" style="grid-template-columns:1fr auto"><div class="nm"><div><span>${esc(v.m.home.short)} – ${esc(v.m.away.short)}</span></div>
@@ -733,7 +737,7 @@ function vAyar(){
   <div class="card"><h4>Ligler</h4><div class="lgsel">${LEAGUES.map(l=>`<button class="chip ${S.leagues.includes(l.id)?'on':''}" data-tlg="${l.id}">${esc(l.name)}</button>`).join('')}</div></div>
   <div class="card"><h4>Model</h4>
    <label class="f">Form hafızası (gün). Küçük = son maçlar daha ağır basar. Önerilen 45</label><input id="sHL" class="full" type="number" step="5" value="${S.halfLife}">
-   <label class="f">Bahis sitesi oranının ağırlığı (%). 0 = sadece model. Önerilen 40</label><input id="sMk" class="full" type="number" step="5" value="${S.market}">
+   <label class="f">Bahis sitesi oranının ağırlığı (%). 0 = sadece model. Önerilen 60</label><input id="sMk" class="full" type="number" step="5" value="${S.market}">
    <label class="f">Küçültme (sanal maç sayısı; az veride aşırı tahmini önler)</label><input id="sK" class="full" type="number" step="1" value="${S.k}">
    <label class="f">Dixon-Coles ρ (düşük skor düzeltmesi)</label><input id="sRho" class="full" type="number" step="0.01" value="${S.rho}"></div>
   <div class="card"><h4>Değer ve kasa</h4>
@@ -817,8 +821,8 @@ document.addEventListener('click',e=>{
   else if(t.id==='pullOdds')loadOddsAPI();
   else if(t.id==='refresh')loadAll();
   else if(t.id==='save'){const n=(id,d)=>{const v=parseFloat(String($(id).value).replace(',','.'));return Number.isFinite(v)?v:d};
-    S.proxy=$('#sProxy').value;S.oddsKey=$('#sKey').value.trim();S.halfLife=n('#sHL',45);S.market=Math.min(100,Math.max(0,n('#sMk',40)));S.k=n('#sK',4);S.rho=n('#sRho',-0.05);
-    S.minEV=n('#sEV',3);S.bank=n('#sBank',1000);S.kelly=n('#sKelly',25);store.set('ia_settings',S);state.lastProxy=null;state.rCache={};state.ver++;aCache.clear();toast('Kaydedildi');loadAll()}
+    S.proxy=$('#sProxy').value;S.oddsKey=$('#sKey').value.trim();S.halfLife=n('#sHL',45);S.market=Math.min(100,Math.max(0,n('#sMk',60)));S.k=n('#sK',4);S.rho=n('#sRho',-0.05);
+    S.minEV=n('#sEV',5);S.bank=n('#sBank',1000);S.kelly=n('#sKelly',25);store.set('ia_settings',S);state.lastProxy=null;state.rCache={};state.ver++;aCache.clear();toast('Kaydedildi');loadAll()}
   else if(t.id==='clr'){try{Object.keys(localStorage).filter(k=>k.startsWith('ia_st_')||k==='ia_apiodds').forEach(k=>localStorage.removeItem(k))}catch(e){}
     apiOdds={t:0,data:{}};state.ver++;aCache.clear();toast('Önbellek temizlendi');loadAll()}
 });
