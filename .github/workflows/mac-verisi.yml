@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: mac-verisi
+  cancel-in-progress: false
+
 jobs:
   veri:
     runs-on: ubuntu-latest
@@ -23,30 +27,51 @@ jobs:
           cat > /tmp/veri.mjs <<'EOF'
           import fs from 'fs';
           const LGS = ['tur.1','tur.2','eng.1','eng.2','esp.1','ita.1','ger.1','fra.1','ned.1','por.1','bel.1','uefa.champions','uefa.europa','uefa.europa.conf'];
-          const ymd = d => d.toISOString().slice(0,10).replace(/-/g,'');
-          const now = Date.now();
-          const from = ymd(new Date(now - 86400e3)), to = ymd(new Date(now + 3*86400e3));
+          const DAY = 86400e3, now = Date.now();
+          const ymd = t => new Date(t).toISOString().slice(0,10).replace(/-/g,'');
           const sleep = ms => new Promise(r => setTimeout(r, ms));
+          const BASE = 'https://site.api.espn.com/apis/site/v2/sports/soccer/';
+          let lastErr = '';
           async function getJSON(u){
-            for (let i = 0; i < 3; i++){
-              try { const r = await fetch(u, {headers:{'User-Agent':'Mozilla/5.0'}}); if (r.ok) return await r.json(); }
-              catch (e) {}
-              await sleep(1500);
+            for (let i = 0; i < 2; i++){
+              try {
+                const r = await fetch(u, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(15000) });
+                if (r.ok) return await r.json();
+                lastErr = 'HTTP ' + r.status;
+              } catch (e) { lastErr = String(e.message || e); }
+              await sleep(700);
             }
             return null;
           }
+          // ESPN'in kabul ettigi bicimi bul: once tarih araligi, olmazsa tek tek gunler
+          let mode = null;
+          async function scoreboard(lg, fromT, toT){
+            if (mode !== 'day'){
+              const r = await getJSON(`${BASE}${lg}/scoreboard?dates=${ymd(fromT)}-${ymd(toT)}`);
+              if (r && Array.isArray(r.events)){ if (r.events.length || mode === 'range') { mode = 'range'; return r.events; } }
+              else if (mode === 'range') return [];
+            }
+            const evs = [], seen = new Set();
+            for (let t = fromT; t <= toT; t += DAY){
+              const r = await getJSON(`${BASE}${lg}/scoreboard?dates=${ymd(t)}`);
+              (r?.events || []).forEach(e => { if (!seen.has(e.id)) { seen.add(e.id); evs.push(e); } });
+            }
+            if (evs.length && !mode) mode = 'day';
+            return evs;
+          }
           const sc = s => (s && typeof s === 'object') ? (s.displayValue ?? s.value) : s;
+          let old = {};
+          try { old = JSON.parse(fs.readFileSync('data/espn.json', 'utf8')).leagues || {}; } catch (e) {}
           const out = { updated: new Date().toISOString(), leagues: {} };
           for (const lg of LGS){
-            const sb = await getJSON(`https://site.api.espn.com/apis/site/v2/sports/soccer/${lg}/scoreboard?dates=${from}-${to}&limit=300`);
-            const st = await getJSON(`https://site.api.espn.com/apis/v2/sports/soccer/${lg}/standings`);
-            const events = (sb?.events || []).map(ev => {
+            const evRaw = await scoreboard(lg, now - DAY, now + 4*DAY);
+            const events = evRaw.map(ev => {
               const c = (ev.competitions || [])[0] || {};
               const o = (c.odds || [])[0];
               const s = ev.status || c.status || {};
               return {
                 id: ev.id, date: ev.date,
-                status: { type: { state: s.type?.state, shortDetail: s.type?.shortDetail }, displayClock: s.displayClock },
+                status: { type: { state: s.type?.state, shortDetail: s.type?.shortDetail, completed: !!s.type?.completed }, displayClock: s.displayClock },
                 competitions: [{
                   competitors: (c.competitors || []).map(x => ({
                     homeAway: x.homeAway, score: sc(x.score), form: x.form,
@@ -59,6 +84,7 @@ jobs:
                 }]
               };
             });
+            const st = await getJSON(`https://site.api.espn.com/apis/v2/sports/soccer/${lg}/standings`);
             const teams = {};
             const walk = n => {
               if (!n) return;
@@ -69,29 +95,36 @@ jobs:
               (n.children || []).forEach(walk);
             };
             walk(st);
-            const names = {};
-            const results = [];
-            const seen = new Set();
-            for (let k = 0; k < 4; k++){
-              const a = ymd(new Date(now - (120 - 30*k) * 86400e3)), b = ymd(new Date(now - (91 - 30*k) * 86400e3));
-              const r = await getJSON(`https://site.api.espn.com/apis/site/v2/sports/soccer/${lg}/scoreboard?dates=${a}-${b}&limit=500`);
-              (r?.events || []).forEach(ev => {
-                const c = (ev.competitions || [])[0] || {};
-                const s = ev.status || c.status || {};
-                if (!s.type?.completed || seen.has(ev.id)) return;
-                const H = (c.competitors || []).find(x => x.homeAway === 'home'), A = (c.competitors || []).find(x => x.homeAway === 'away');
-                if (!H || !A) return;
-                const hg = +sc(H.score), ag = +sc(A.score);
-                if (!Number.isFinite(hg) || !Number.isFinite(ag)) return;
-                seen.add(ev.id);
-                names[H.team?.id] = H.team?.shortDisplayName || H.team?.displayName;
-                names[A.team?.id] = A.team?.shortDisplayName || A.team?.displayName;
-                results.push([ev.id, Date.parse(ev.date), String(H.team?.id), String(A.team?.id), hg, ag]);
-              });
+            // Gecmis sonuclar: dosyada varsa sadece son 4 gunu cek (hizli), yoksa 120 gunu bir kez doldur
+            const O = old[lg] || {};
+            const names = Object.assign({}, O.names || {});
+            const byId = new Map((O.results || []).filter(r => r[1] > now - 130*DAY).map(r => [String(r[0]), r]));
+            const backfill = byId.size < 20 && (!O.bf || now - O.bf > DAY);
+            const add = list => list.forEach(ev => {
+              const c = (ev.competitions || [])[0] || {};
+              const s = ev.status || c.status || {};
+              if (!s.type?.completed) return;
+              const H = (c.competitors || []).find(x => x.homeAway === 'home'), A = (c.competitors || []).find(x => x.homeAway === 'away');
+              if (!H || !A) return;
+              const hg = +sc(H.score), ag = +sc(A.score);
+              if (!Number.isFinite(hg) || !Number.isFinite(ag)) return;
+              names[H.team?.id] = H.team?.shortDisplayName || H.team?.displayName;
+              names[A.team?.id] = A.team?.shortDisplayName || A.team?.displayName;
+              byId.set(String(ev.id), [String(ev.id), Date.parse(ev.date), String(H.team?.id), String(A.team?.id), hg, ag]);
+            });
+            add(evRaw);
+            if (backfill){
+              if (mode === 'day'){
+                for (let k = 120; k >= 1; k -= 1){ const r = await getJSON(`${BASE}${lg}/scoreboard?dates=${ymd(now - k*DAY)}`); add(r?.events || []); }
+              } else {
+                for (let k = 0; k < 8; k++){ add(await scoreboard(lg, now - (120 - 15*k)*DAY, now - (106 - 15*k)*DAY)); }
+              }
+            } else {
+              add(await scoreboard(lg, now - 4*DAY, now - DAY));
             }
-            results.sort((x, y) => x[1] - y[1]);
-            out.leagues[lg] = { ok: !!sb, events, teams, results, names };
-            console.log(lg, 'mac:', events.length, 'takim:', Object.keys(teams).length, 'sonuc:', results.length);
+            const results = [...byId.values()].sort((x, y) => x[1] - y[1]);
+            out.leagues[lg] = { ok: evRaw.length > 0, events, teams, results, names, bf: backfill ? now : (O.bf || 0) };
+            console.log(lg, 'mac:', events.length, 'takim:', Object.keys(teams).length, 'sonuc:', results.length, 'bicim:', mode, backfill ? '(ilk doldurma)' : '', lastErr ? 'son hata: ' + lastErr : '');
           }
           fs.mkdirSync('data', { recursive: true });
           fs.writeFileSync('data/espn.json', JSON.stringify(out));
