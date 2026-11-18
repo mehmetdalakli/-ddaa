@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>İddaa Analiz</title>
+<meta name="theme-color" content="#172554">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+:root{
+  --navy:#172554;--navy2:#1e3a8a;--bg:#eef2f9;--card:#fff;--ink:#0f172a;--mute:#64748b;--line:#e2e8f0;
+  --blue:#2563eb;--sky:#38bdf8;--gold:#facc15;--amber:#f59e0b;--orange:#ea580c;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+body{padding-bottom:calc(84px + env(safe-area-inset-bottom))}
+button{font:inherit;cursor:pointer}
+header{background:var(--navy);color:#fff;padding:calc(14px + env(safe-area-inset-top)) 16px 12px;border-radius:0 0 22px 22px;position:sticky;top:0;z-index:5}
+.hrow{display:flex;align-items:center;gap:10px}
+.date{font-size:13px;opacity:.85;display:flex;align-items:center;gap:6px}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--sky)}
+.dot.demo{background:var(--gold)}
+h1{font-size:21px;margin:2px 0 0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.badge{font:600 11px ui-monospace,monospace;padding:4px 8px;border-radius:8px;border:1px solid var(--sky);color:var(--sky);letter-spacing:.5px}
+.badge.demo{border-color:var(--gold);color:var(--gold)}
+.ibtn{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:12px;width:42px;height:42px;font-size:19px}
+.ibtn.spin{animation:sp 1s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.svc{font-size:12px;opacity:.75;margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,.15);display:flex;justify-content:space-between}
+main{padding:14px}
+.hero{background:linear-gradient(140deg,#1e3a8a,#172554);color:#fff;border-radius:22px;padding:18px;margin-bottom:14px;box-shadow:0 8px 20px rgba(23,37,84,.25)}
+.hero small{letter-spacing:1.5px;opacity:.8;font-size:11px}
+.hero h2{color:var(--gold);margin:8px 0 4px;font-size:22px}
+.hero p{margin:0;opacity:.85;font-size:14px}
+.hstats{display:flex;justify-content:space-between;margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.15)}
+.hstats b{display:block;font-size:17px}.hstats span{font-size:11px;opacity:.7}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:2px 0 10px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 13px;font-size:13px;color:var(--ink)}
+.chip.on{background:var(--blue);border-color:var(--blue);color:#fff}
+.search{width:100%;padding:12px 14px;border-radius:14px;border:1px solid var(--line);font-size:15px;margin-bottom:12px;background:#fff}
+.sec{display:flex;align-items:center;gap:8px;margin:6px 2px 10px}
+.sec h3{margin:0;font-size:17px}
+.pill{background:var(--blue);color:#fff;border-radius:999px;font-size:12px;padding:3px 9px}
+.lg{font-size:12px;font-weight:600;color:var(--mute);margin:14px 4px 6px;text-transform:uppercase;letter-spacing:.6px}
+.m{background:var(--card);border-radius:16px;padding:12px 14px;margin-bottom:8px;display:grid;grid-template-columns:48px 1fr auto;gap:10px;align-items:center;border:1px solid var(--line)}
+.m .t{font-size:13px;color:var(--mute);text-align:center}
+.m .t.live{color:var(--blue);font-weight:700}
+.m .nm{font-size:15px;line-height:1.45}
+.m .nm div{display:flex;justify-content:space-between;gap:6px}
+.m .nm em{font-style:normal;font-weight:700}
+.prob{display:flex;gap:4px}
+.prob span{font-size:11px;background:#f1f5f9;border-radius:8px;padding:4px 6px;text-align:center;min-width:38px}
+.prob span b{display:block;font-size:13px}
+.prob span.top{background:#dbeafe;color:var(--navy2)}
+.vtag{font-size:10px;background:var(--gold);color:#422006;border-radius:6px;padding:1px 5px;margin-left:4px;font-weight:700}
+.empty{background:#fff;border-radius:18px;padding:30px 18px;text-align:center;color:var(--mute)}
+nav{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);display:flex;padding:6px 6px calc(6px + env(safe-area-inset-bottom));z-index:6}
+nav button{flex:1;background:none;border:0;color:var(--mute);font-size:11px;padding:6px 0;display:flex;flex-direction:column;align-items:center;gap:3px}
+nav button i{font-style:normal;font-size:20px;width:46px;height:30px;line-height:30px;border-radius:12px}
+nav button.on{color:var(--navy)}
+nav button.on i{background:#dbeafe}
+.card{background:#fff;border-radius:18px;padding:14px;margin-bottom:12px;border:1px solid var(--line)}
+.card h4{margin:0 0 10px;font-size:15px}
+.bar{display:flex;height:30px;border-radius:10px;overflow:hidden;font-size:12px;font-weight:700;color:#fff}
+.bar div{display:flex;align-items:center;justify-content:center;min-width:0;overflow:hidden}
+.b1{background:var(--blue)}.bx{background:#94a3b8}.b2{background:var(--orange)}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.mk{border:1px solid var(--line);border-radius:12px;padding:8px 10px;font-size:13px}
+.mk .r{display:flex;justify-content:space-between;align-items:center}
+.mk small{color:var(--mute)}
+.mk input{width:66px;padding:5px 6px;border:1px solid var(--line);border-radius:8px;font-size:14px;text-align:center}
+.mk.val{border-color:var(--amber);background:#fffbeb}
+.ev{font-size:12px;font-weight:700}
+.ev.pos{color:#b45309}.ev.neg{color:var(--mute)}
+.scores{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.scores div{background:#f1f5f9;border-radius:10px;text-align:center;padding:6px 0;font-size:12px}
+.scores b{display:block;font-size:15px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+td,th{padding:6px 4px;border-bottom:1px solid var(--line);text-align:center}
+td:first-child,th:first-child{text-align:left}
+.sheet{position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:10;display:none}
+.sheet.on{display:block}
+.sheet .in{position:absolute;left:0;right:0;bottom:0;max-height:92vh;overflow:auto;background:var(--bg);border-radius:22px 22px 0 0;padding:14px 14px calc(20px + env(safe-area-inset-bottom))}
+.sh{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.sh h3{flex:1;margin:0;font-size:18px}
+.x{border:0;background:#e2e8f0;border-radius:10px;width:36px;height:36px;font-size:18px}
+label.f{display:block;font-size:13px;color:var(--mute);margin:10px 0 4px}
+.f+input,.f+select,input.full,select.full{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:12px;font-size:15px;background:#fff}
+.btn{background:var(--blue);color:#fff;border:0;border-radius:12px;padding:11px 14px;font-weight:600;width:100%;margin-top:12px}
+.btn.alt{background:#e2e8f0;color:var(--ink)}
+.note{font-size:12px;color:var(--mute);line-height:1.5}
+.lgsel{display:flex;flex-wrap:wrap;gap:6px}
+.ev-row{display:grid;grid-template-columns:1fr auto;gap:4px;align-items:center}
+.toast{position:fixed;left:50%;bottom:100px;transform:translateX(-50%);background:var(--navy);color:#fff;padding:10px 16px;border-radius:12px;font-size:13px;z-index:20;display:none;max-width:90vw}
+.warn{background:#fef9c3;border:1px solid var(--gold);color:#422006;border-radius:12px;padding:10px;font-size:13px;margin-bottom:12px}
+</style>
+</head>
+<body>
+<header>
+  <div class="hrow">
+    <div style="flex:1;min-width:0">
+      <div class="date"><span class="dot" id="dot"></span><span id="today"></span></div>
+      <div class="hrow"><h1>İddaa Analiz</h1><span class="badge" id="badge">…</span></div>
+    </div>
+    <button class="ibtn" id="refresh" title="Yenile">⟳</button>
+  </div>
+  <div class="svc"><span id="svc">Servis: hazırlanıyor</span><span id="upd"></span></div>
+</header>
+
+<main id="view"></main>
+
+<nav id="nav">
+  <button data-tab="bulten" class="on"><i>📅</i>Canlı Bülten</button>
+  <button data-tab="analiz"><i>📊</i>Analiz</button>
+  <button data-tab="value"><i>📈</i>Değerli (+EV)</button>
+  <button data-tab="ayar"><i>⚙️</i>Ayarlar</button>
+</nav>
+
+<div class="sheet" id="sheet"><div class="in" id="sheetIn"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   İDDAA ANALİZ — tek dosya PWA
+   Veri: ESPN açık JSON API (anahtarsız)  +  isteğe bağlı The Odds API (ücretsiz anahtar)
+   Model: Poisson (Dixon-Coles düzeltmeli), lig ortalamasına göre hücum/savunma gücü
+   ============================================================ */
+
+const LEAGUES = [
+  {id:'tur.1', name:'Süper Lig',        odds:'soccer_turkey_super_league'},
+  {id:'tur.2', name:'1. Lig',           odds:null},
+  {id:'eng.1', name:'Premier League',   odds:'soccer_epl'},
+  {id:'eng.2', name:'Championship',     odds:'soccer_efl_champ'},
+  {id:'esp.1', name:'La Liga',          odds:'soccer_spain_la_liga'},
+  {id:'ita.1', name:'Serie A',          odds:'soccer_italy_serie_a'},
+  {id:'ger.1', name:'Bundesliga',       odds:'soccer_germany_bundesliga'},
+  {id:'fra.1', name:'Ligue 1',          odds:'soccer_france_ligue_one'},
+  {id:'ned.1', name:'Eredivisie',       odds:'soccer_netherlands_eredivisie'},
+  {id:'por.1', name:'Portekiz',         odds:'soccer_portugal_primeira_liga'},
+  {id:'bel.1', name:'Belçika',          odds:'soccer_belgium_first_div'},
+  {id:'uefa.champions', name:'Şampiyonlar Ligi', odds:'soccer_uefa_champs_league'},
+  {id:'uefa.europa',    name:'Avrupa Ligi',      odds:'soccer_uefa_europa_league'},
+  {id:'uefa.europa.conf', name:'Konferans Ligi', odds:'soccer_uefa_europa_conference_league'},
+];
+const LG = Object.fromEntries(LEAGUES.map(l=>[l.id,l]));
+
+const PROXIES = {
+  direct: u=>u,
+  corsproxy: u=>'https://corsproxy.io/?url='+encodeURIComponent(u),
+  allorigins: u=>'https://api.allorigins.win/raw?url='+encodeURIComponent(u),
+};
+
+/* ---------- güvenli localStorage ---------- */
+const store = {
+  get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},
+  set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+};
+
+const DEF = {leagues:['tur.1','eng.1','esp.1','ita.1','ger.1','fra.1','uefa.champions','uefa.europa'],
+  proxy:'auto', oddsKey:'', hfa:1.12, k:4, bank:1000, minEV:3, kelly:25, rho:-0.05};
+let S = Object.assign({}, DEF, store.get('ia_settings',{}));
+let manualOdds = store.get('ia_odds',{});        // {matchId:{1:2.1,...}}
+let apiOdds = store.get('ia_apiodds',{t:0,data:{}});
+
+let state = {tab:'bulten', day:0, lgFilter:'all', q:'', matches:[], standings:{}, mode:'?', loading:false, lastProxy:null};
+
+/* ---------- yardımcılar ---------- */
+const $ = s=>document.querySelector(s);
+const esc = s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pct = p=>(p*100).toFixed(0)+'%';
+const fx = (n,d=2)=>Number.isFinite(n)?n.toFixed(d):'-';
+function toast(t){const e=$('#toast');e.textContent=t;e.style.display='block';clearTimeout(toast.h);toast.h=setTimeout(()=>e.style.display='none',2600)}
+function ymd(d){return d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')}
+function dayDate(off){const d=new Date();d.setHours(12,0,0,0);d.setDate(d.getDate()+off);return d}
+function sameLocalDay(iso,d){const x=new Date(iso);return x.getFullYear()==d.getFullYear()&&x.getMonth()==d.getMonth()&&x.getDate()==d.getDate()}
+function hhmm(iso){return new Date(iso).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'})}
+function norm(s){return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/ı/g,'i')
+  .replace(/\b(fc|sk|as|ac|afc|cf|sc|fk|jk|ss|ud|cd|club|calcio|spor kulubu|1907|1903|1905)\b/g,' ').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim()}
+function nameSim(a,b){const A=new Set(norm(a).split(' ').filter(w=>w.length>2)),B=new Set(norm(b).split(' ').filter(w=>w.length>2));
+  if(!A.size||!B.size)return 0;let n=0;A.forEach(w=>{if(B.has(w))n++});return n/Math.min(A.size,B.size)}
+
+/* ---------- ağ: doğrudan dene, olmazsa ücretsiz CORS proxy ---------- */
+async function getJSON(url){
+  const order = S.proxy==='auto' ? [state.lastProxy||'direct','direct','corsproxy','allorigins'] : [S.proxy];
+  const tried=new Set();let lastErr;
+  for(const p of order){ if(tried.has(p))continue; tried.add(p);
+    try{
+      const ctl=new AbortController();const to=setTimeout(()=>ctl.abort(),12000);
+      const r=await fetch(PROXIES[p](url),{signal:ctl.signal});clearTimeout(to);
+      if(!r.ok)throw new Error('HTTP '+r.status);
+      const j=await r.json();state.lastProxy=p;return j;
+    }catch(e){lastErr=e}
+  }
+  throw lastErr||new Error('ağ hatası');
+}
+
+/* ---------- ESPN: fikstür ---------- */
+async function loadScoreboard(lg,d){
+  const a=new Date(d);a.setDate(a.getDate()-1);const b=new Date(d);b.setDate(b.getDate()+1);
+  const url=`https://site.api.espn.com/apis/site/v2/sports/soccer/${lg}/scoreboard?dates=${ymd(a)}-${ymd(b)}&limit=200`;
+  const j=await getJSON(url);
+  return (j.events||[]).filter(ev=>sameLocalDay(ev.date,d)).map(ev=>parseEvent(ev,lg));
+}
+function amToDec(ml){const n=parseFloat(ml);if(!Number.isFinite(n)||n===0)return null;return n>0?1+n/100:1+100/Math.abs(n)}
+function parseEvent(ev,lg){
+  const c=(ev.competitions||[])[0]||{};const cs=c.competitors||[];
+  const H=cs.find(x=>x.homeAway==='home')||cs[0]||{}, A=cs.find(x=>x.homeAway==='away')||cs[1]||{};
+  const tm=x=>({id:String(x.team?.id||''),name:x.team?.displayName||x.team?.name||'?',short:x.team?.shortDisplayName||x.team?.abbreviation||x.team?.displayName||'?',
+    logo:x.team?.logo||'',score:x.score!=null&&x.score!==''?Number(x.score):null,form:x.form||''});
+  const st=ev.status||c.status||{};
+  let espnOdds=null;const o=(c.odds||[])[0];
+  if(o){const h=amToDec(o.homeTeamOdds?.moneyLine),a=amToDec(o.awayTeamOdds?.moneyLine),d=amToDec(o.drawOdds?.moneyLine);
+    if(h&&a&&d)espnOdds={'1':+h.toFixed(2),'X':+d.toFixed(2),'2':+a.toFixed(2),src:o.provider?.name||'ESPN'}}
+  return {id:String(ev.id),lg,date:ev.date,state:st.type?.state||'pre',detail:st.type?.shortDetail||'',clock:st.displayClock||'',
+    home:tm(H),away:tm(A),espnOdds};
+}
+
+/* ---------- ESPN: puan durumu (model girdisi) ---------- */
+async function loadStandings(lg){
+  const cache=store.get('ia_st_'+lg,null);
+  if(cache&&Date.now()-cache.t<6*3600e3)return cache.d;
+  const j=await getJSON(`https://site.api.espn.com/apis/v2/sports/soccer/${lg}/standings`);
+  const teams={};
+  const walk=n=>{ if(!n)return;
+    (n.standings?.entries||[]).forEach(e=>{const s={};(e.stats||[]).forEach(x=>{s[x.name||x.type]=x.value});
+      teams[String(e.team?.id)]={name:e.team?.displayName,gp:+s.gamesPlayed||0,gf:+s.pointsFor||0,ga:+s.pointsAgainst||0,rank:+s.rank||null,pts:+s.points||0}});
+    (n.children||[]).forEach(walk);};
+  walk(j);
+  store.set('ia_st_'+lg,{t:Date.now(),d:teams});
+  return teams;
+}
+
+/* ---------- MODEL ---------- */
+function pois(k,l){let p=Math.exp(-l);for(let i=1;i<=k;i++)p*=l/i;return p}
+function leagueAvg(teams){let g=0,n=0;Object.values(teams).forEach(t=>{g+=t.gf;n+=t.gp});return n>20?g/n:1.35}
+function lambdas(m){
+  const T=state.standings[m.lg]||{};const avg=leagueAvg(T);const k=S.k;
+  const h=T[m.home.id],a=T[m.away.id];
+  const att=t=>t?((t.gf+k*avg)/(t.gp+k))/avg:1, def=t=>t?((t.ga+k*avg)/(t.gp+k))/avg:1;
+  const lh=avg*att(h)*def(a)*S.hfa, la=avg*att(a)*def(h)/S.hfa;
+  return {lh:Math.min(Math.max(lh,.2),4.5),la:Math.min(Math.max(la,.2),4.5),avg,h,a,lowData:!(h&&a&&h.gp>=3&&a.gp>=3)};
+}
+function minuteOf(m){const n=parseInt(String(m.clock).replace(/[^0-9+]/g,'').split('+')[0]);return Number.isFinite(n)?Math.min(n,90):45}
+function analyse(m){
+  const L=lambdas(m);let lh=L.lh,la=L.la,bh=0,ba=0,live=false;
+  if(m.state==='in'){live=true;const rem=Math.max(0,1-minuteOf(m)/90);lh*=rem;la*=rem;bh=m.home.score||0;ba=m.away.score||0}
+  const N=10,M=[];let tot=0;
+  for(let i=0;i<=N;i++){M[i]=[];for(let j=0;j<=N;j++){let p=pois(i,lh)*pois(j,la);
+    if(!live){const r=S.rho;if(i===0&&j===0)p*=1-lh*la*r;else if(i===0&&j===1)p*=1+lh*r;else if(i===1&&j===0)p*=1+la*r;else if(i===1&&j===1)p*=1-r}
+    M[i][j]=p;tot+=p}}
+  const P={h:0,d:0,a:0,o15:0,o25:0,o35:0,btts:0,scores:[]};
+  for(let i=0;i<=N;i++)for(let j=0;j<=N;j++){const p=M[i][j]/tot,H=i+bh,A=j+ba,G=H+A;
+    if(H>A)P.h+=p;else if(H===A)P.d+=p;else P.a+=p;
+    if(G>1.5)P.o15+=p;if(G>2.5)P.o25+=p;if(G>3.5)P.o35+=p;if(H>0&&A>0)P.btts+=p;
+    P.scores.push({s:H+'-'+A,p})}
+  const agg={};P.scores.forEach(x=>agg[x.s]=(agg[x.s]||0)+x.p);
+  P.scores=Object.entries(agg).map(([s,p])=>({s,p})).sort((x,y)=>y.p-x.p).slice(0,10);
+  P.L=L;P.lh=L.lh;P.la=L.la;P.live=live;
+  return P;
+}
+const MARKETS=[
+  ['1','MS 1',P=>P.h],['X','MS X',P=>P.d],['2','MS 2',P=>P.a],
+  ['1X','ÇŞ 1-X',P=>P.h+P.d],['X2','ÇŞ X-2',P=>P.d+P.a],['12','ÇŞ 1-2',P=>P.h+P.a],
+  ['O15','1,5 Üst',P=>P.o15],['U15','1,5 Alt',P=>1-P.o15],
+  ['O25','2,5 Üst',P=>P.o25],['U25','2,5 Alt',P=>1-P.o25],
+  ['O35','3,5 Üst',P=>P.o35],['U35','3,5 Alt',P=>1-P.o35],
+  ['KGV','KG Var',P=>P.btts],['KGY','KG Yok',P=>1-P.btts],
+];
+function oddsFor(m){ // öncelik: elle girilen > Odds API > ESPN
+  const o={};const src={};
+  if(m.espnOdds)['1','X','2'].forEach(k=>{o[k]=m.espnOdds[k];src[k]=m.espnOdds.src});
+  const ao=apiOdds.data[m.id];if(ao)Object.keys(ao).forEach(k=>{if(k!=='bk'){o[k]=ao[k];src[k]=ao.bk?.[k]||'Odds API'}});
+  const mo=manualOdds[m.id];if(mo)Object.keys(mo).forEach(k=>{if(mo[k]>1){o[k]=mo[k];src[k]='Elle'}});
+  return {o,src};
+}
+function evOf(p,odd){return p*odd-1}
+function kellyStake(p,odd){const b=odd-1;const f=(b*p-(1-p))/b;return f>0?f*(S.kelly/100)*S.bank:0}
+function valueBets(m,P){
+  const {o,src}=oddsFor(m);const out=[];
+  MARKETS.forEach(([k,l,f])=>{if(o[k]>1){const p=f(P),ev=evOf(p,o[k]);out.push({k,l,p,odd:o[k],ev,src:src[k],stake:kellyStake(p,o[k])})}});
+  return out;
+}
+
+/* ---------- The Odds API (isteğe bağlı) ---------- */
+async function loadOddsAPI(){
+  if(!S.oddsKey){toast('Önce Ayarlar\'dan Odds API anahtarını gir');return}
+  const lgs=[...new Set(state.matches.map(m=>m.lg))].filter(l=>LG[l]?.odds);
+  if(!lgs.length){toast('Bu liglerin oranı Odds API\'de yok');return}
+  setBusy(true);let n=0,left='';
+  for(const lg of lgs){
+    try{
+      const url=`https://api.the-odds-api.com/v4/sports/${LG[lg].odds}/odds/?apiKey=${encodeURIComponent(S.oddsKey)}&regions=eu&markets=h2h,totals&oddsFormat=decimal`;
+      const r=await fetch(url);left=r.headers.get('x-requests-remaining')||left;
+      if(!r.ok)throw new Error('HTTP '+r.status);
+      const evs=await r.json();
+      state.matches.filter(m=>m.lg===lg).forEach(m=>{
+        const ev=evs.find(e=>nameSim(e.home_team,m.home.name)>=.5&&nameSim(e.away_team,m.away.name)>=.5);
+        if(!ev)return;const best={bk:{}};
+        const put=(k,price,bk)=>{if(!best[k]||price>best[k]){best[k]=price;best.bk[k]=bk}};
+        (ev.bookmakers||[]).forEach(b=>(b.markets||[]).forEach(mk=>(mk.outcomes||[]).forEach(oc=>{
+          if(mk.key==='h2h'){const k=oc.name===ev.home_team?'1':oc.name===ev.away_team?'2':'X';put(k,oc.price,b.title)}
+          if(mk.key==='totals'&&[1.5,2.5,3.5].includes(oc.point)){const k=(oc.name==='Over'?'O':'U')+String(oc.point).replace('.','');put(k,oc.price,b.title)}
+        })));
+        apiOdds.data[m.id]=best;n++;
+      });
+    }catch(e){console.warn(e)}
+  }
+  apiOdds.t=Date.now();store.set('ia_apiodds',apiOdds);setBusy(false);
+  toast(`${n} maça oran eklendi${left?` · kalan kredi: ${left}`:''}`);render();
+}
+
+/* ---------- DEMO verisi (API'ye ulaşılamazsa) ---------- */
+function demo(){
+  const d=dayDate(state.day);const at=(h,mi)=>{const x=new Date(d);x.setHours(h,mi,0,0);return x.toISOString()};
+  const T=(id,name,gp,gf,ga,rank)=>({id,name,gp,gf,ga,rank});
+  state.standings={'tur.1':Object.fromEntries([T('1','Galatasaray',12,31,10,1),T('2','Beşiktaş',12,22,14,4),T('3','Fenerbahçe',12,28,11,2),T('4','Trabzonspor',12,20,15,5),
+    T('5','Samsunspor',12,18,12,3),T('6','Kasımpaşa',12,14,22,14),T('7','Göztepe',12,16,13,6),T('8','Alanyaspor',12,12,19,13)].map(t=>[t.id,t])),
+    'eng.1':Object.fromEntries([T('11','Arsenal',12,25,8,1),T('12','Chelsea',12,22,13,4),T('13','Liverpool',12,23,15,3),T('14','Aston Villa',12,15,14,7)].map(t=>[t.id,t]))};
+  const mk=(id,lg,h,a,hn,an,t,o)=>({id,lg,date:t,state:'pre',detail:'',clock:'',home:{id:h,name:hn,short:hn,score:null,form:''},away:{id:a,name:an,short:an,score:null,form:''},espnOdds:o});
+  const live=mk('d5','tur.1','5','6','Samsunspor','Kasımpaşa',at(19,0),null);live.state='in';live.clock="63'";live.home.score=1;live.away.score=0;
+  return [mk('d1','tur.1','1','2','Galatasaray','Beşiktaş',at(20,0),{'1':1.62,'X':4.10,'2':4.90,src:'Demo'}),
+    mk('d2','tur.1','3','4','Fenerbahçe','Trabzonspor',at(17,0),{'1':1.55,'X':4.20,'2':5.40,src:'Demo'}),
+    mk('d3','tur.1','7','8','Göztepe','Alanyaspor',at(14,30),null),live,
+    mk('d4','eng.1','11','12','Arsenal','Chelsea',at(22,0),{'1':1.80,'X':3.70,'2':4.40,src:'Demo'}),
+    mk('d6','eng.1','13','14','Liverpool','Aston Villa',at(18,0),{'1':1.70,'X':4.00,'2':4.60,src:'Demo'})];
+}
+
+/* ---------- yükleme ---------- */
+function setBusy(b){state.loading=b;$('#refresh').classList.toggle('spin',b)}
+async function loadAll(){
+  setBusy(true);render();
+  const d=dayDate(state.day);const lgs=S.leagues;
+  const res=await Promise.allSettled(lgs.map(lg=>loadScoreboard(lg,d)));
+  const ok=res.filter(r=>r.status==='fulfilled');
+  if(!ok.length){state.mode='demo';state.matches=demo();}
+  else{
+    state.mode='live';state.matches=ok.flatMap(r=>r.value).sort((a,b)=>new Date(a.date)-new Date(b.date));
+    const need=[...new Set(state.matches.map(m=>m.lg))];
+    const st=await Promise.allSettled(need.map(lg=>loadStandings(lg)));
+    need.forEach((lg,i)=>{if(st[i].status==='fulfilled')state.standings[lg]=st[i].value});
+  }
+  setBusy(false);
+  $('#upd').textContent='Güncelleme '+new Date().toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'});
+  render();
+  clearTimeout(loadAll.t);
+  if(state.mode==='live'&&state.matches.some(m=>m.state==='in'))loadAll.t=setTimeout(loadAll,60000); // canlı maç varsa 60 sn'de bir yenile
+}
+
+/* ---------- ÇİZİM ---------- */
+function header(){
+  const live=state.mode==='live';
+  $('#today').textContent='Bugün: '+new Date().toLocaleDateString('tr-TR',{day:'numeric',month:'long',year:'numeric',weekday:'short'});
+  $('#badge').textContent=live?'CANLI API':state.mode==='demo'?'DEMO':'…';
+  $('#badge').className='badge'+(live?'':' demo');$('#dot').className='dot'+(live?'':' demo');
+  $('#svc').textContent=live?`Servis: ESPN${state.lastProxy&&state.lastProxy!=='direct'?' · proxy: '+state.lastProxy:' · doğrudan'}`:state.mode==='demo'?'Servis: API\'ye ulaşılamadı → demo veri':'Servis: bağlanıyor…';
+}
+function filtered(){
+  const q=norm(state.q);
+  return state.matches.filter(m=>(state.lgFilter==='all'||m.lg===state.lgFilter)&&(!q||norm(m.home.name+' '+m.away.name).includes(q)));
+}
+function timeCell(m){
+  if(m.state==='in')return `<div class="t live">● ${esc(m.clock||'CANLI')}</div>`;
+  if(m.state==='post')return `<div class="t">MS</div>`;
+  return `<div class="t">${hhmm(m.date)}</div>`;
+}
+function matchRow(m){
+  const P=analyse(m);const vb=valueBets(m,P).filter(v=>v.ev*100>=S.minEV);
+  const mx=Math.max(P.h,P.d,P.a);
+  const sc=x=>x.score==null?'':`<em>${x.score}</em>`;
+  return `<div class="m" data-id="${m.id}">${timeCell(m)}
+    <div class="nm"><div><span>${esc(m.home.short)}</span>${sc(m.home)}</div><div><span>${esc(m.away.short)}</span>${sc(m.away)}</div>
+      <div style="font-size:11px;color:var(--mute)">xG ${fx(P.lh,1)} – ${fx(P.la,1)}${P.L.lowData?' · az veri':''}${vb.length?`<span class="vtag">▲ ${vb.length} değer</span>`:''}</div></div>
+    <div class="prob">${[['1',P.h],['X',P.d],['2',P.a]].map(([k,p])=>`<span class="${p===mx?'top':''}">${k}<b>${pct(p)}</b></span>`).join('')}</div></div>`;
+}
+function vBulten(){
+  const list=filtered();const lgsPresent=[...new Set(state.matches.map(m=>m.lg))];
+  const top=state.matches.filter(m=>m.state!=='post').map(m=>({m,P:analyse(m)})).sort((a,b)=>Math.max(b.P.h,b.P.a)-Math.max(a.P.h,a.P.a))[0];
+  const days=[-1,0,1,2].map(o=>`<button class="chip ${state.day===o?'on':''}" data-day="${o}">${o===0?'Bugün':o===1?'Yarın':o===-1?'Dün':dayDate(o).toLocaleDateString('tr-TR',{weekday:'short',day:'numeric'})}</button>`).join('');
+  let html=`<div class="hero"><small>CANLI TAHMİN MOTORU · Poisson & xG</small>
+    <h2>${top?esc(top.m.home.short+' vs '+top.m.away.short):'Bülten yükleniyor'}</h2>
+    <p>${top?`En net favori: ${top.P.h>top.P.a?esc(top.m.home.short):esc(top.m.away.short)} (${pct(Math.max(top.P.h,top.P.a))}). Detay için maça dokun.`:'Bültendeki herhangi bir maça dokunarak analiz edebilirsin.'}</p>
+    <div class="hstats"><div><span>Model</span><b>Poisson + Value Bet</b></div><div style="text-align:right"><span>Bültendeki maçlar</span><b>${state.loading?'Yükleniyor…':state.matches.length}</b></div></div></div>
+    ${state.mode==='demo'?`<div class="warn">Canlı API'ye ulaşılamadı, demo maçlar gösteriliyor. Uygulamayı kendi adresinde (GitHub Pages/Netlify) açınca canlı veri gelir. Olmazsa Ayarlar → Bağlantı'dan proxy seç.</div>`:''}
+    <div class="chips">${days}</div>
+    <div class="chips"><button class="chip ${state.lgFilter==='all'?'on':''}" data-lg="all">Tüm Ligler</button>${lgsPresent.map(l=>`<button class="chip ${state.lgFilter===l?'on':''}" data-lg="${l}">${esc(LG[l]?.name||l)}</button>`).join('')}</div>
+    <input class="search" id="q" placeholder="Takım ismi ile maç ara…" value="${esc(state.q)}">
+    <div class="sec"><h3>Günün Bülteni</h3><span class="pill">${list.length} Maç</span></div>`;
+  if(state.loading&&!state.matches.length)html+=`<div class="empty">⟳<br><br>Günün maç bülteni çekiliyor…</div>`;
+  else if(!list.length)html+=`<div class="empty">Bu gün/filtre için maç yok.</div>`;
+  else{let cur='';list.forEach(m=>{if(m.lg!==cur){cur=m.lg;html+=`<div class="lg">${esc(LG[m.lg]?.name||m.lg)}</div>`}html+=matchRow(m)})}
+  return html;
+}
+function vAnaliz(){
+  const list=state.matches.filter(m=>m.state!=='post').map(m=>({m,P:analyse(m)}));
+  if(!list.length)return `<div class="empty">Analiz edilecek maç yok.</div>`;
+  const rows=(arr,fn,lab)=>`<div class="card"><h4>${lab}</h4><table>${arr.map(({m,P})=>`<tr data-id="${m.id}"><td>${esc(m.home.short)} – ${esc(m.away.short)}</td><td><b>${fn(P)}</b></td></tr>`).join('')}</table></div>`;
+  const by=(f)=>[...list].sort((a,b)=>f(b.P)-f(a.P)).slice(0,6);
+  return `<div class="sec"><h3>Analiz Ekranı</h3></div>
+   ${rows(by(P=>Math.max(P.h,P.a)),P=>pct(Math.max(P.h,P.a))+(P.h>P.a?' (1)':' (2)'),'En güçlü favoriler')}
+   ${rows(by(P=>P.o25),P=>pct(P.o25),'2,5 Üst olasılığı en yüksek')}
+   ${rows(by(P=>1-P.o25),P=>pct(1-P.o25),'2,5 Alt olasılığı en yüksek')}
+   ${rows(by(P=>P.btts),P=>pct(P.btts),'KG Var olasılığı en yüksek')}
+   ${rows(by(P=>P.d),P=>pct(P.d),'Beraberliğe en yakın')}`;
+}
+function vValue(){
+  const all=[];state.matches.filter(m=>m.state!=='post').forEach(m=>{const P=analyse(m);valueBets(m,P).forEach(v=>all.push({m,...v}))});
+  const good=all.filter(v=>v.ev*100>=S.minEV).sort((a,b)=>b.ev-a.ev);
+  const age=apiOdds.t?Math.round((Date.now()-apiOdds.t)/60000)+' dk önce':'hiç';
+  return `<div class="sec"><h3>Değerli Bahisler (+EV)</h3><span class="pill">${good.length}</span></div>
+   <div class="card note">Değer = model olasılığı × oran − 1. Oran kaynağı: maç detayında elle girdiğin iddaa oranları, Odds API (son çekim: ${age}) veya ESPN. Eşik: +%${S.minEV}. Stake: Kasa ${S.bank} × Kelly %${S.kelly}.
+   <button class="btn" id="pullOdds">Oranları Odds API'den çek</button></div>
+   ${good.length?good.map(v=>`<div class="m" data-id="${v.m.id}" style="grid-template-columns:1fr auto"><div class="nm"><div><span>${esc(v.m.home.short)} – ${esc(v.m.away.short)}</span></div>
+     <div style="font-size:13px"><b>${v.l}</b> @ ${fx(v.odd)} <span style="color:var(--mute)">(${esc(v.src)})</span></div>
+     <div style="font-size:12px;color:var(--mute)">Model ${pct(v.p)} · Adil oran ${fx(1/v.p)} · Öneri ${fx(v.stake,0)} ₺</div></div>
+     <div class="ev pos" style="font-size:16px">▲ +${fx(v.ev*100,1)}%</div></div>`).join('')
+   :`<div class="empty">Şu an eşiği geçen değerli bahis yok.<br><br>Maç detayına iddaa oranlarını gir ya da Odds API'den oran çek.</div>`}`;
+}
+function vAyar(){
+  return `<div class="sec"><h3>Ayarlar</h3></div>
+  <div class="card"><h4>Ligler</h4><div class="lgsel">${LEAGUES.map(l=>`<button class="chip ${S.leagues.includes(l.id)?'on':''}" data-tlg="${l.id}">${esc(l.name)}</button>`).join('')}</div></div>
+  <div class="card"><h4>Bağlantı</h4>
+   <label class="f">Veri bağlantısı</label><select id="sProxy" class="full">
+    ${[['auto','Otomatik (önce doğrudan, olmazsa proxy)'],['direct','Doğrudan ESPN'],['corsproxy','corsproxy.io üzerinden'],['allorigins','allorigins üzerinden']].map(([v,t])=>`<option value="${v}" ${S.proxy===v?'selected':''}>${t}</option>`).join('')}</select>
+   <label class="f">The Odds API anahtarı (ücretsiz, ayda 500 kredi)</label><input id="sKey" class="full" value="${esc(S.oddsKey)}" placeholder="the-odds-api.com'dan e-posta ile al">
+   <p class="note">Her lig için oran çekmek 2 kredi harcar (1X2 + Alt/Üst). Oranlar telefonda saklanır.</p></div>
+  <div class="card"><h4>Model</h4>
+   <label class="f">Ev sahibi avantajı (1,00 = yok)</label><input id="sHfa" class="full" type="number" step="0.01" value="${S.hfa}">
+   <label class="f">Küçültme (sanal maç sayısı; az maçta aşırı tahmini önler)</label><input id="sK" class="full" type="number" step="1" value="${S.k}">
+   <label class="f">Dixon-Coles ρ (düşük skor düzeltmesi)</label><input id="sRho" class="full" type="number" step="0.01" value="${S.rho}"></div>
+  <div class="card"><h4>Değer ve kasa</h4>
+   <label class="f">Değer eşiği (%)</label><input id="sEV" class="full" type="number" step="0.5" value="${S.minEV}">
+   <label class="f">Kasa (₺)</label><input id="sBank" class="full" type="number" step="50" value="${S.bank}">
+   <label class="f">Kelly oranı (%) — 25 = çeyrek Kelly</label><input id="sKelly" class="full" type="number" step="5" value="${S.kelly}">
+   <button class="btn" id="save">Kaydet ve yenile</button>
+   <button class="btn alt" id="clr">Önbelleği temizle</button></div>
+  <p class="note" style="padding:0 4px">Model olasılık tahmini yapar, sonuç garantisi vermez. Kasanı aşan miktarla oynama.</p>`;
+}
+function render(){
+  header();
+  const v={bulten:vBulten,analiz:vAnaliz,value:vValue,ayar:vAyar}[state.tab]();
+  $('#view').innerHTML=v;
+  document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab===state.tab));
+  const q=$('#q');if(q){q.oninput=e=>{state.q=e.target.value;const pos=e.target.selectionStart;render();const n=$('#q');n.focus();n.setSelectionRange(pos,pos)}}
+}
+
+/* ---------- maç detayı ---------- */
+function openMatch(id){
+  const m=state.matches.find(x=>x.id===id);if(!m)return;
+  const draw=()=>{
+    const P=analyse(m);const {o,src}=oddsFor(m);const mo=manualOdds[m.id]||{};const L=P.L;
+    const tRow=(t,lbl)=>t?`<tr><td>${esc(lbl)}</td><td>${t.rank||'-'}</td><td>${t.gp}</td><td>${t.gf}</td><td>${t.ga}</td><td>${fx(t.gf/Math.max(t.gp,1))}</td><td>${fx(t.ga/Math.max(t.gp,1))}</td></tr>`:`<tr><td>${esc(lbl)}</td><td colspan="6">veri yok</td></tr>`;
+    $('#sheetIn').innerHTML=`<div class="sh"><h3>${esc(m.home.name)} – ${esc(m.away.name)}</h3><button class="x" id="cls">✕</button></div>
+     <div class="note" style="margin:-4px 0 10px">${esc(LG[m.lg]?.name||m.lg)} · ${m.state==='in'?'CANLI '+esc(m.clock)+` · Skor ${m.home.score}-${m.away.score}`:m.state==='post'?'Bitti '+m.home.score+'-'+m.away.score:hhmm(m.date)}${P.live?' · olasılıklar kalan süreye göre':''}</div>
+     ${L.lowData?`<div class="warn">Bu maç için puan tablosu verisi az/yok; tahmin lig ortalamasına yakın.</div>`:''}
+     <div class="card"><h4>Maç sonucu olasılığı</h4>
+      <div class="bar"><div class="b1" style="width:${P.h*100}%">1 ${pct(P.h)}</div><div class="bx" style="width:${P.d*100}%">X ${pct(P.d)}</div><div class="b2" style="width:${P.a*100}%">2 ${pct(P.a)}</div></div>
+      <p class="note">Beklenen gol (xG): <b>${fx(P.lh)}</b> – <b>${fx(P.la)}</b> · Lig ort. ${fx(L.avg)} gol/takım</p></div>
+     <div class="card"><h4>Pazarlar · iddaa oranını gir, değeri gör</h4><div class="grid">
+      ${MARKETS.map(([k,l,f])=>{const p=f(P),odd=o[k],ev=odd>1?evOf(p,odd):null;const val=ev!=null&&ev*100>=S.minEV;
+        return `<div class="mk ${val?'val':''}"><div class="r"><b>${l}</b><span>${pct(p)}</span></div>
+        <div class="r"><small>Adil ${fx(1/p)}</small><input inputmode="decimal" data-mk="${k}" value="${mo[k]||''}" placeholder="${odd?fx(odd):'oran'}"></div>
+        <div class="r"><small>${odd?esc(src[k]):''}</small><span class="ev ${ev>0?'pos':'neg'}">${ev==null?'':(ev>0?'▲ +':'▼ ')+fx(ev*100,1)+'%'}</span></div></div>`}).join('')}
+     </div><p class="note">Adil oran = 1 / olasılık. Girilen oran adil orandan yüksekse değer vardır (▲). Kasa önerisi: ${valueBets(m,P).filter(v=>v.stake>0).map(v=>`${v.l} ${fx(v.stake,0)} ₺`).join(', ')||'—'}</p></div>
+     <div class="card"><h4>En olası skorlar</h4><div class="scores">${P.scores.map(x=>`<div><b>${x.s}</b>${pct(x.p)}</div>`).join('')}</div></div>
+     <div class="card"><h4>Takım verileri</h4><table><tr><th>Takım</th><th>Sıra</th><th>O</th><th>AG</th><th>YG</th><th>AG/m</th><th>YG/m</th></tr>${tRow(L.h,m.home.short)}${tRow(L.a,m.away.short)}</table>
+      ${m.home.form||m.away.form?`<p class="note">Form: ${esc(m.home.short)} ${esc(m.home.form)} · ${esc(m.away.short)} ${esc(m.away.form)}</p>`:''}</div>`;
+    $('#cls').onclick=close;
+    document.querySelectorAll('#sheetIn input[data-mk]').forEach(inp=>inp.onchange=e=>{
+      const v=parseFloat(String(e.target.value).replace(',','.'));manualOdds[m.id]=manualOdds[m.id]||{};
+      if(v>1)manualOdds[m.id][e.target.dataset.mk]=v;else delete manualOdds[m.id][e.target.dataset.mk];
+      store.set('ia_odds',manualOdds);const sc=$('#sheet .in').scrollTop;draw();$('#sheet .in').scrollTop=sc;render();});
+  };
+  const close=()=>$('#sheet').classList.remove('on');
+  draw();$('#sheet').classList.add('on');$('#sheet .in').scrollTop=0;
+}
+
+/* ---------- olaylar ---------- */
+document.addEventListener('click',e=>{
+  const t=e.target.closest('[data-tab],[data-day],[data-lg],[data-id],[data-tlg],#pullOdds,#save,#clr,#refresh');
+  if(e.target.id==='sheet'){$('#sheet').classList.remove('on');return}
+  if(!t)return;
+  if(t.dataset.tab){state.tab=t.dataset.tab;render();window.scrollTo(0,0)}
+  else if(t.dataset.day!=null){state.day=+t.dataset.day;state.lgFilter='all';loadAll()}
+  else if(t.dataset.lg){state.lgFilter=t.dataset.lg;render()}
+  else if(t.dataset.tlg){const id=t.dataset.tlg;S.leagues=S.leagues.includes(id)?S.leagues.filter(x=>x!==id):[...S.leagues,id];store.set('ia_settings',S);render()}
+  else if(t.dataset.id&&!t.closest('#sheet')){openMatch(t.dataset.id)}
+  else if(t.id==='pullOdds')loadOddsAPI();
+  else if(t.id==='refresh')loadAll();
+  else if(t.id==='save'){const n=(id,d)=>{const v=parseFloat(String($(id).value).replace(',','.'));return Number.isFinite(v)?v:d};
+    S.proxy=$('#sProxy').value;S.oddsKey=$('#sKey').value.trim();S.hfa=n('#sHfa',1.12);S.k=n('#sK',4);S.rho=n('#sRho',-0.05);
+    S.minEV=n('#sEV',3);S.bank=n('#sBank',1000);S.kelly=n('#sKelly',25);store.set('ia_settings',S);state.lastProxy=null;toast('Kaydedildi');loadAll()}
+  else if(t.id==='clr'){try{Object.keys(localStorage).filter(k=>k.startsWith('ia_st_')||k==='ia_apiodds').forEach(k=>localStorage.removeItem(k))}catch(e){}
+    apiOdds={t:0,data:{}};toast('Önbellek temizlendi');loadAll()}
+});
+
+/* ---------- PWA ---------- */
+if('serviceWorker' in navigator&&location.protocol.startsWith('http')){navigator.serviceWorker.register('sw.js').catch(()=>{})}
+
+render();loadAll();
+</script>
+</body>
+</html>
