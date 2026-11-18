@@ -498,7 +498,8 @@ async function loadAll(){
   const repo=await loadRepoData();
   if(repo){
     state.mode='repo';state.repo=repo;state.repoTime=repo.updated;state.standings={};buildIndex(repo);state.ver++;aCache.clear();
-    state.matches=lgs.flatMap(lg=>{const L=repo.leagues[lg];if(!L)return[];state.standings[lg]=L.teams||{};
+    Object.entries(repo.leagues||{}).forEach(([lg,L])=>state.standings[lg]=L.teams||{});
+    state.matches=lgs.flatMap(lg=>{const L=repo.leagues[lg];if(!L)return[];
       return (L.events||[]).filter(ev=>sameLocalDay(ev.date,d)).map(ev=>parseEvent(ev,lg))}).sort((a,b)=>new Date(a.date)-new Date(b.date));
     setBusy(false);$('#upd').textContent='Veri '+new Date(repo.updated).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'});render();
     clearTimeout(loadAll.t);if(state.matches.some(m=>m.state==='in'))loadAll.t=setTimeout(loadAll,120000);
@@ -541,15 +542,22 @@ const FILTERS=[
   ['val','Değerli oran',(P,m)=>valueBets(m,P).some(v=>v.ev*100>=S.minEV)],
   ['conf','Yüksek güven',P=>P.conf===3],
 ];
+function searchPool(){ // arama yapılırken: seçili günden bağımsız, verideki tüm günler ve tüm ligler
+  if(!state.repo)return state.matches;
+  if(state.poolVer!==state.ver){const seen=new Set();state.pool=[];state.extra=state.extra||{};
+    Object.entries(state.repo.leagues||{}).forEach(([lg,L])=>(L.events||[]).forEach(ev=>{const m=parseEvent(ev,lg);if(seen.has(m.id))return;seen.add(m.id);state.pool.push(m);state.extra[m.id]=m}));
+    state.pool.sort((a,b)=>new Date(a.date)-new Date(b.date));state.poolVer=state.ver}
+  return state.pool;
+}
 function filtered(){
   const q=norm(state.q);const F=FILTERS.find(f=>f[0]===state.flt)||FILTERS[0];
-  return state.matches.filter(m=>(state.lgFilter==='all'||m.lg===state.lgFilter)&&(!q||norm(m.home.name+' '+m.away.name).includes(q))&&
+  return (q?searchPool():state.matches).filter(m=>(state.lgFilter==='all'||m.lg===state.lgFilter)&&(!q||norm(m.home.name+' '+m.away.name).includes(q))&&
     (F[0]==='all'||(m.state!=='post'&&F[2](analyse(m),m))));
 }
 function timeCell(m){
   if(m.state==='in')return `<div class="t live">● ${esc(m.clock||'CANLI')}</div>`;
   if(m.state==='post')return `<div class="t">MS</div>`;
-  return `<div class="t">${hhmm(m.date)}</div>`;
+  return `<div class="t">${state.q?new Date(m.date).toLocaleDateString('tr-TR',{weekday:'short'})+'<br>':''}${hhmm(m.date)}</div>`;
 }
 function checkMark(m){ // bitmiş maçta, maç öncesi kaydedilen tahmin tuttu mu?
   const p=predLog[m.id];if(m.state!=='post'||!p||m.home.score==null)return '';
@@ -570,7 +578,7 @@ function matchRow(m){
 function vBulten(){
   const list=filtered();const lgsPresent=[...new Set(state.matches.map(m=>m.lg))];
   const top=state.matches.filter(m=>m.state==='pre').map(m=>({m,P:analyse(m)})).sort((a,b)=>Math.max(b.P.h,b.P.a)-Math.max(a.P.h,a.P.a))[0];
-  const days=[-1,0,1,2].map(o=>`<button class="chip ${state.day===o?'on':''}" data-day="${o}">${o===0?'Bugün':o===1?'Yarın':o===-1?'Dün':dayDate(o).toLocaleDateString('tr-TR',{weekday:'short',day:'numeric'})}</button>`).join('');
+  const days=[-1,0,1,2,3,4].map(o=>`<button class="chip ${state.day===o?'on':''}" data-day="${o}">${o===0?'Bugün':o===1?'Yarın':o===-1?'Dün':dayDate(o).toLocaleDateString('tr-TR',{weekday:'short',day:'numeric'})}</button>`).join('');
   const live=state.matches.filter(m=>m.state==='in').length;
   let html=`<div class="hero"><small>TAHMİN MOTORU · Form + Poisson + Piyasa</small>
     <h2>${top?esc(top.m.home.short+' vs '+top.m.away.short):state.loading?'Bülten yükleniyor':'Başlamamış maç yok'}</h2>
@@ -583,10 +591,11 @@ function vBulten(){
     <div class="chips"><button class="chip ${state.lgFilter==='all'?'on':''}" data-lg="all">Tüm Ligler</button>${lgsPresent.map(l=>`<button class="chip ${state.lgFilter===l?'on':''}" data-lg="${l}">${esc(LG[l]?.name||l)}</button>`).join('')}</div>
     <div class="chips">${FILTERS.map(f=>`<button class="chip sm ${state.flt===f[0]?'on':''}" data-flt="${f[0]}">${f[1]}</button>`).join('')}</div>
     <input class="search" id="q" placeholder="Takım ismi ile maç ara…" value="${esc(state.q)}">
-    <div class="sec"><h3>${FILTERS.find(f=>f[0]===state.flt)?.[1]==='Tümü'?'Günün Bülteni':esc(FILTERS.find(f=>f[0]===state.flt)[1])}</h3><span class="pill">${list.length} Maç</span></div>`;
+    <div class="sec"><h3>${state.q?'Arama sonuçları (tüm günler)':FILTERS.find(f=>f[0]===state.flt)?.[1]==='Tümü'?'Günün Bülteni':esc(FILTERS.find(f=>f[0]===state.flt)[1])}</h3><span class="pill">${list.length} Maç</span></div>`;
   if(state.loading&&!state.matches.length)html+=`<div class="empty">⟳<br><br>Günün maç bülteni çekiliyor…</div>`;
-  else if(!list.length)html+=`<div class="empty">Bu gün/filtre için maç yok.</div>`;
-  else{let cur='';list.forEach(m=>{if(m.lg!==cur){cur=m.lg;html+=`<div class="lg">${esc(LG[m.lg]?.name||m.lg)}</div>`}html+=matchRow(m)})}
+  else if(!list.length)html+=`<div class="empty">${state.q?`"${esc(state.q)}" için önümüzdeki 4 gün içinde maç bulunamadı.`:'Bu gün/filtre için maç yok.'}</div>`;
+  else{let cur='';list.forEach(m=>{const key=state.q?new Date(m.date).toDateString()+m.lg:m.lg;
+    if(key!==cur){cur=key;html+=`<div class="lg">${state.q?new Date(m.date).toLocaleDateString('tr-TR',{weekday:'long',day:'numeric',month:'long'})+' · ':''}${esc(LG[m.lg]?.name||m.lg)}</div>`}html+=matchRow(m)})}
   html+=`<p class="note" style="padding:6px 4px">Simgeler: 🔥 gole açıldı · 🧊 golde kısır · 🛡️ savunma sağlam · ⚽ Üst trendi · 🔒 Alt trendi · 📈/📉 seri · 🏟️ iç/dış saha · 😓 yorgunluk · ⚖️ model–piyasa ayrışması</p>`;
   return html;
 }
@@ -603,7 +612,7 @@ function kuponMaclari(){
   let list=state.matches;
   if(S.kuponGun==='2'&&state.repo){const d2=dayDate(state.day+1);
     list=list.concat(S.leagues.flatMap(lg=>(state.repo.leagues[lg]?.events||[]).filter(ev=>sameLocalDay(ev.date,d2)).map(ev=>parseEvent(ev,lg))));}
-  state.extra={};list.forEach(m=>state.extra[m.id]=m);
+  state.extra=state.extra||{};list.forEach(m=>state.extra[m.id]=m);
   return list.filter(m=>m.state==='pre'&&new Date(m.date)>Date.now());
 }
 function trendBonus(k,m,P){ // seçim, takımların son form trendiyle uyumluysa küçük bonus
@@ -751,7 +760,7 @@ function formBlock(t,isHome,kick){
    <p class="note">${isHome?'İç sahada':'Deplasmanda'} son ${v.n}: ${v.w}G ${v.d}B ${v.l}M, gol ${v.gf}-${v.ga}${rest!=null?` · Son maçından bu yana ${rest} gün`:''}</p></div>`;
 }
 function openMatch(id){
-  const m=state.matches.find(x=>x.id===id)||state.extra?.[id];if(!m)return;
+  const m=state.matches.find(x=>x.id===id)||state.extra?.[id]||(state.pool||[]).find(x=>x.id===id);if(!m)return;
   const draw=()=>{
     const P=analyse(m);const {o,src}=oddsFor(m);const mo=manualOdds[m.id]||{};const L=P.L;const kick=Date.parse(m.date);
     const ins=insights(m,P);
