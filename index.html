@@ -329,7 +329,7 @@ function lambdas(m){
 function minuteOf(m){const n=parseInt(String(m.clock).replace(/[^0-9+]/g,'').split('+')[0]);return Number.isFinite(n)?Math.min(n,90):45}
 function marketProbs(m){ // bahis sitesi oranından marjı temizlenmiş olasılık (elle girilen oranlar hariç)
   let o=null;const ao=apiOdds.data[m.id];
-  if(ao&&ao['1']&&ao['X']&&ao['2'])o=ao;else if(m.espnOdds)o=m.espnOdds;
+  if(ao&&ao.avg&&ao.avg['1']&&ao.avg['X']&&ao.avg['2'])o=ao.avg;else if(ao&&ao['1']&&ao['X']&&ao['2'])o=ao;else if(m.espnOdds)o=m.espnOdds;
   if(!o)return null;const s=1/o['1']+1/o['X']+1/o['2'];return {h:1/o['1']/s,d:1/o['X']/s,a:1/o['2']/s};
 }
 const aCache=new Map();
@@ -425,7 +425,7 @@ const MARKETS=[
 function oddsFor(m){ // öncelik: elle girilen > Odds API > ESPN
   const o={};const src={};
   if(m.espnOdds)['1','X','2'].forEach(k=>{o[k]=m.espnOdds[k];src[k]=m.espnOdds.src});
-  const ao=apiOdds.data[m.id];if(ao)Object.keys(ao).forEach(k=>{if(k!=='bk'){o[k]=ao[k];src[k]=ao.bk?.[k]||'Odds API'}});
+  const ao=apiOdds.data[m.id];if(ao)Object.keys(ao).forEach(k=>{if(!['bk','avg','nb'].includes(k)){o[k]=ao[k];src[k]=ao.bk?.[k]||'Odds API'}});
   const mo=manualOdds[m.id];if(mo)Object.keys(mo).forEach(k=>{if(mo[k]>1){o[k]=mo[k];src[k]='Elle'}});
   return {o,src};
 }
@@ -433,7 +433,7 @@ function evOf(p,odd){return p*odd-1}
 function kellyStake(p,odd){const b=odd-1;const f=(b*p-(1-p))/b;return f>0?f*(S.kelly/100)*S.bank:0}
 function valueBets(m,P){
   const {o,src}=oddsFor(m);const out=[];
-  MARKETS.forEach(([k,l,f])=>{if(o[k]>1){const p=f(P),ev=evOf(p,o[k]);out.push({k,l,p,odd:o[k],ev,src:src[k],stake:kellyStake(p,o[k])})}});
+  MARKETS.forEach(([k,l,f])=>{if(o[k]>1){const p=f(P),ev=evOf(p,o[k]);out.push({k,l,p,odd:o[k],ev,src:src[k],sus:ev>.20,stake:ev>.20?0:kellyStake(p,o[k])})}});
   return out;
 }
 
@@ -451,13 +451,19 @@ async function loadOddsAPI(){
       const evs=await r.json();
       state.matches.filter(m=>m.lg===lg).forEach(m=>{
         const ev=evs.find(e=>nameSim(e.home_team,m.home.name)>=.5&&nameSim(e.away_team,m.away.name)>=.5);
-        if(!ev)return;const best={bk:{}};
-        const put=(k,price,bk)=>{if(!best[k]||price>best[k]){best[k]=price;best.bk[k]=bk}};
-        (ev.bookmakers||[]).forEach(b=>(b.markets||[]).forEach(mk=>(mk.outcomes||[]).forEach(oc=>{
+        if(!ev)return;
+        // bahis borsaları (Betfair Exchange, Matchbook vb.) hariç: oranları gerçekte alınamayabilir
+        const EXCH=/betfair_ex|matchbook|smarkets|betdaq|exchange/i;const col={};
+        const put=(k,price,bk)=>{(col[k]=col[k]||[]).push({price,bk})};
+        (ev.bookmakers||[]).forEach(b=>{if(EXCH.test(b.key||'')||EXCH.test(b.title||''))return;(b.markets||[]).forEach(mk=>(mk.outcomes||[]).forEach(oc=>{
           if(mk.key==='h2h'){const k=oc.name===ev.home_team?'1':oc.name===ev.away_team?'2':'X';put(k,oc.price,b.title)}
           if(mk.key==='totals'&&[1.5,2.5,3.5].includes(oc.point)){const k=(oc.name==='Over'?'O':'U')+String(oc.point).replace('.','');put(k,oc.price,b.title)}
-        })));
-        apiOdds.data[m.id]=best;n++;
+        }))});
+        const best={bk:{},avg:{},nb:{}};
+        Object.entries(col).forEach(([k,arr])=>{const avg=arr.reduce((a,x)=>a+x.price,0)/arr.length;arr.sort((a,b)=>b.price-a.price);
+          // tek bir sitenin aşırı yüksek oranı yerine: en yüksek oran, ortalamanın en fazla %8 üstü
+          const top=arr[0];best[k]=+Math.min(top.price,avg*1.08).toFixed(2);best.bk[k]=top.price>avg*1.08?'Piyasa üst sınırı':top.bk;best.avg[k]=+avg.toFixed(3);best.nb[k]=arr.length});
+        if(Object.keys(best.avg).length){apiOdds.data[m.id]=best;n++}
       });
     }catch(e){console.warn(e)}
   }
@@ -632,7 +638,7 @@ function kuponYap(T,maclar){
     let c=adaylar(m).filter(a=>a.p>=T.pMin&&a.p<=T.pMax&&a.odd>=T.oMin);
     const strict=c.filter(a=>a.conf>=T.minConf);if(strict.length||T.k==='k1')c=strict;
     if(!c.length)return;
-    c.forEach(a=>a.skor=(a.real?(a.p*a.odd-1)*2:0)+1-Math.abs(a.p-T.hedef)*2+(T.k==='k1'?a.p:0)+a.tb+(a.conf-2)*.05);
+    c.forEach(a=>a.skor=(a.real?Math.min(a.p*a.odd-1,.10)*2:0)+1-Math.abs(a.p-T.hedef)*2+(T.k==='k1'?a.p:0)+a.tb+(a.conf-2)*.05);
     best.push(c.sort((x,y)=>y.skor-x.skor)[0]);
   });
   const sec=best.sort((x,y)=>y.skor-x.skor).slice(0,T.n);
@@ -710,15 +716,16 @@ function fl(f){return `<span class="fl">${f.list.slice().reverse().map(x=>{const
 
 function vValue(){
   const all=[];state.matches.filter(m=>m.state!=='post').forEach(m=>{const P=analyse(m);valueBets(m,P).forEach(v=>all.push({m,...v,conf:P.conf}))});
-  const good=all.filter(v=>v.ev*100>=S.minEV).sort((a,b)=>b.ev-a.ev);
+  const good=all.filter(v=>v.ev*100>=S.minEV).sort((a,b)=>(a.sus-b.sus)||(b.ev-a.ev));const nSus=good.filter(v=>v.sus).length;
   const age=apiOdds.t?Math.round((Date.now()-apiOdds.t)/60000)+' dk önce':'hiç';
   return `<div class="sec"><h3>Değerli Bahisler (+EV)</h3><span class="pill">${good.length}</span></div>
-   <div class="card note">Değer = olasılık × oran − 1. Oran kaynağı: maç detayında elle girdiğin iddaa oranları, Odds API (son çekim: ${age}) veya ESPN. Eşik: +%${S.minEV}. Stake: Kasa ${S.bank} × Kelly %${S.kelly}.
+   <div class="card note">Değer = olasılık × oran − 1. Oran kaynağı: maç detayında elle girdiğin iddaa oranları, Odds API (son çekim: ${age}; bahis borsaları hariç, ortalamanın en fazla %8 üstü) veya ESPN. Eşik: +%${S.minEV}. Stake: Kasa ${S.bank} × Kelly %${S.kelly}.
    <button class="btn" id="pullOdds">Oranları Odds API'den çek</button></div>
+   ${nSus?`<div class="warn">⚠️ ${nSus} seçimde değer %20'nin üstünde. Bu genelde gerçek bir fırsat değil, modelin o maçı yanlış okuduğunu gösterir (sakatlık, rotasyon, motivasyon gibi modelin bilmediği bir şey olabilir). Bunlar listenin sonunda ve kasa önerisi verilmiyor.</div>`:''}
    ${good.length?good.map(v=>`<div class="m" data-id="${v.m.id}" style="grid-template-columns:1fr auto"><div class="nm"><div><span>${esc(v.m.home.short)} – ${esc(v.m.away.short)}</span></div>
      <div style="font-size:13px"><b>${v.l}</b> @ ${fx(v.odd)} <span style="color:var(--mute)">(${esc(v.src)})</span> <span class="cf c${v.conf}">${CONF[v.conf]} güven</span></div>
-     <div style="font-size:12px;color:var(--mute)">Olasılık ${pct(v.p)} · Adil oran ${fx(1/v.p)} · Öneri ${fx(v.stake,0)} ₺</div></div>
-     <div class="ev pos" style="font-size:16px">▲ +${fx(v.ev*100,1)}%</div></div>`).join('')
+     <div style="font-size:12px;color:var(--mute)">Olasılık ${pct(v.p)} · Adil oran ${fx(1/v.p)} · ${v.sus?'⚠️ Şüpheli — oynama':'Öneri '+fx(v.stake,0)+' ₺'}</div></div>
+     <div class="ev ${v.sus?'neg':'pos'}" style="font-size:16px">${v.sus?'⚠️':'▲'} +${fx(v.ev*100,1)}%</div></div>`).join('')
    :`<div class="empty">Şu an eşiği geçen değerli bahis yok.<br><br>Maç detayına iddaa oranlarını gir ya da Odds API'den oran çek.</div>`}`;
 }
 function vAyar(){
@@ -776,10 +783,10 @@ function openMatch(id){
       <p class="note">Beklenen gol: <b>${fx(P.lh)}</b> – <b>${fx(P.la)}</b> · Lig ort. ${fx(L.avg)} gol/takım · Ev avantajı ×${fx(L.hfa)} · Kaynak: ${L.src==='form'?`son maçlar (${L.nH} ve ${L.nA} maç, rakip gücüne göre düzeltilmiş)`:'sezon ortalaması'}</p>
       ${L.src==='form'?`<div class="stt"><div>${esc(m.home.short)} hücum<b>${fx(L.attH*100,0)}</b></div><div>${esc(m.home.short)} savunma<b>${fx(200-L.defH*100,0)}</b></div><div>${esc(m.away.short)} hücum<b>${fx(L.attA*100,0)}</b></div><div>${esc(m.away.short)} savunma<b>${fx(200-L.defA*100,0)}</b></div></div><p class="note">100 = lig ortalaması; yüksek daha iyi.</p>`:''}</div>
      <div class="card"><h4>Pazarlar · iddaa oranını gir, değeri gör</h4><div class="grid">
-      ${MARKETS.map(([k,l,f])=>{const p=f(P),odd=o[k],ev=odd>1?evOf(p,odd):null;const val=ev!=null&&ev*100>=S.minEV;
+      ${MARKETS.map(([k,l,f])=>{const p=f(P),odd=o[k],ev=odd>1?evOf(p,odd):null;const val=ev!=null&&ev*100>=S.minEV&&ev<=.2;
         return `<div class="mk ${val?'val':''}"><div class="r"><b>${l}</b><span>${pct(p)}</span></div>
         <div class="r"><small>Adil ${fx(1/p)}</small><input inputmode="decimal" data-mk="${k}" value="${mo[k]||''}" placeholder="${odd?fx(odd):'oran'}"></div>
-        <div class="r"><small>${odd?esc(src[k]):''}</small><span class="ev ${ev>0?'pos':'neg'}">${ev==null?'':(ev>0?'▲ +':'▼ ')+fx(ev*100,1)+'%'}</span></div></div>`}).join('')}
+        <div class="r"><small>${odd?esc(src[k]):''}</small><span class="ev ${ev>0?'pos':'neg'}">${ev==null?'':(ev>.2?'⚠️ +':ev>0?'▲ +':'▼ ')+fx(ev*100,1)+'%'}</span></div></div>`}).join('')}
      </div><p class="note">Adil oran = 1 / olasılık. Girilen oran adil orandan yüksekse değer vardır (▲). Kasa önerisi: ${valueBets(m,P).filter(v=>v.stake>0).map(v=>`${v.l} ${fx(v.stake,0)} ₺`).join(', ')||'—'}</p></div>
      <div class="card"><h4>En olası skorlar</h4><div class="scores">${P.scores.map(x=>`<div><b>${x.s}</b>${pct(x.p)}</div>`).join('')}</div></div>
      ${formBlock(m.home,true,kick)}${formBlock(m.away,false,kick)}
